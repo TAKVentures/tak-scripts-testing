@@ -22,20 +22,30 @@ STEP 3 — FOR EACH SCRIPT IN THE QUEUE:
 
 a) Read the test-plan.md in that script's folder for test instructions
 b) Read the script.gs file and copy ALL of the code
-c) Open Google Sheets → create a new blank spreadsheet → name it "TAKScripts Test — [script name]"
-d) Go to Extensions → Apps Script
-e) Delete any existing code in the editor
-f) Paste the script code
-g) Save (Ctrl+S) and name the project "TAKScripts Test — [script name]"
-h) Close the Apps Script editor and reload the Google Sheet
+
+c) Go to the dedicated testing Apps Script project:
+   https://script.google.com/home/projects/1eJaOO7yLY3AcCFMt356c1BuwMCLMhVHGOL3kMAW_QmJtKVoCwtOcyvHg/edit
+   This project is already authorized — no OAuth flow needed.
+
+d) Select ALL existing code in the editor (Ctrl+A) and delete it
+e) Paste the new script code
+f) Save (Ctrl+S)
+
+g) Go to the dedicated testing spreadsheet:
+   https://docs.google.com/spreadsheets/d/15saqWXL0x-DHrPCCO3Ke0i6Sfx9pGYVzqFznI64xfBc/edit
+   This spreadsheet is linked to the Apps Script project above.
+
+h) Reload the spreadsheet (F5 or Ctrl+R) to trigger the onOpen menu
 i) Follow every test step in the test-plan.md — verify each one
 j) For EACH test step, take a screenshot as evidence
+
 k) After all functional tests, do a DESIGN REVIEW using the Design Guide standards:
    - Check sheet styling (headers, colors, column widths, alternating rows)
    - Check menu design (emoji icons, proper items, separator placement)
    - Check sidebar/dialog design (branded header, form styling, button states)
    - Check email formatting if applicable (HTML formatting, branded footer)
    - Check folder/file naming conventions
+
 l) Write a test-report.md with this EXACT format:
 
 ---
@@ -81,7 +91,12 @@ l) Write a test-report.md with this EXACT format:
 ---
 
 m) Push the test-report.md to the GitHub repo in the script's queue folder
-n) Clean up: delete the test spreadsheet and Apps Script project
+
+n) CLEAN UP for the next script:
+   - Go back to the testing spreadsheet
+   - Delete any extra sheet tabs created by the script (keep only the original "Sheet1")
+   - Go back to the Apps Script editor — the code will be replaced with the next script
+
 o) Move on to the next script in the queue
 
 STEP 4 — SUMMARY
@@ -91,10 +106,11 @@ After testing ALL scripts, write a summary comment:
 IMPORTANT RULES:
 - Never modify the script code — only test and report
 - Test EVERY step in the test plan, don't skip any
+- Always use the SAME Apps Script project and spreadsheet (links above) — never create new ones
 - Always check design quality against the Design Guide
 - Be specific in your feedback — include exact colors, sizes, and suggestions
 - If a script fails, explain exactly what went wrong and how to fix it
-- Clean up test projects after each script
+- Clean up sheet tabs between scripts but NEVER delete the spreadsheet itself
 ```
 
 ---
@@ -106,9 +122,9 @@ IMPORTANT RULES:
 3. It will automatically:
    - Read the design guide
    - Find all scripts in the queue
-   - Test each one
+   - Test each one using the dedicated test spreadsheet and Apps Script project
    - Write reports with functional AND design feedback
-   - Clean up after itself
+   - Clean up between scripts
 
 ## Tips
 
@@ -116,3 +132,4 @@ IMPORTANT RULES:
 - The agent will skip scripts that already have test reports
 - To re-test a script, delete its test-report.md from the repo first
 - The agent tests ALL queued scripts in one session — no need to prompt for each one
+- The test spreadsheet and Apps Script project are reused — no new files created
