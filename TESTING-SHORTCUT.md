@@ -23,19 +23,21 @@ STEP 3 — FOR EACH SCRIPT IN THE QUEUE:
 a) Read the test-plan.md in that script's folder for test instructions
 b) Read the script.gs file and copy ALL of the code
 
-c) Go to the dedicated testing Apps Script project:
-   https://script.google.com/home/projects/1eJaOO7yLY3AcCFMt356c1BuwMCLMhVHGOL3kMAW_QmJtKVoCwtOcyvHg/edit
-   This project is already authorized — no OAuth flow needed.
-
-d) Select ALL existing code in the editor (Ctrl+A) and delete it
-e) Paste the new script code
-f) Save (Ctrl+S)
-
-g) Go to the dedicated testing spreadsheet:
+c) Go to the dedicated testing spreadsheet:
    https://docs.google.com/spreadsheets/d/15saqWXL0x-DHrPCCO3Ke0i6Sfx9pGYVzqFznI64xfBc/edit
-   This spreadsheet is linked to the Apps Script project above.
 
-h) Reload the spreadsheet (F5 or Ctrl+R) to trigger the onOpen menu
+d) Open the BOUND Apps Script editor from this spreadsheet:
+   Go to Extensions → Apps Script
+   This will open: https://script.google.com/u/0/home/projects/1Ck25DiFyGGoSyjXnUgdTsuOpxnSi3l6ML1tuvx18Fb0hbwfEO3v3nmKG/edit
+   This is the ONLY project you should use. It is already authorized and bound to the test spreadsheet.
+   NEVER create a new project. NEVER use a different project URL.
+
+e) Select ALL existing code in the editor (Ctrl+A) and delete it
+f) Paste the new script code
+g) Save (Ctrl+S)
+
+h) Go back to the spreadsheet tab and reload it (F5 or Ctrl+R) to trigger the onOpen menu
+   IMPORTANT: Do NOT open Apps Script again after reloading. The menu should appear in the spreadsheet toolbar.
 i) Follow every test step in the test-plan.md — verify each one
 j) For EACH test step, take a screenshot as evidence
 
