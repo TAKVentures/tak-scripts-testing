@@ -275,18 +275,6 @@ function getOrCreateDashboard_(ss) {
   sheet.setColumnWidth(7, 100);  // Status
   sheet.setColumnWidth(8, 130);  // PDF Link
 
-  // ── Footer placeholder (will shift down as data is added) ──
-  const footerRow = DASHBOARD_HEADER_ROW + 2;
-  sheet.getRange(footerRow, 1, 1, LOG_HEADERS.length).merge();
-  sheet.getRange(footerRow, 1)
-    .setValue(BRAND.footerText)
-    .setFontFamily(BRAND.bodyFont)
-    .setFontSize(9)
-    .setFontColor('#CCCCCC')
-    .setFontStyle('italic')
-    .setHorizontalAlignment('center')
-    .setBackground(BRAND.white);
-
   // Move dashboard to first tab position
   ss.setActiveSheet(sheet);
   ss.moveActiveSheet(1);
