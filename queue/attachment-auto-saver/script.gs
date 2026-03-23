@@ -33,7 +33,7 @@ var PROP_SETTINGS = 'atas_settings';
 var PROP_PROCESSED = 'atas_processed_ids';
 var MAX_PROCESSED_IDS = 5000;
 var BATCH_SIZE = 50;
-var DASHBOARD_HEADER_ROW = 3; // Row where data headers start (rows 1-2 are stats)
+var DASHBOARD_HEADER_ROW = 6; // Row where data headers start (rows 1-4 are stats, row 5 is spacer)
 
 // Brand colors
 var BRAND = {
@@ -218,44 +218,103 @@ function getOrCreateDashboard_(ss) {
   if (sheet) return sheet;
 
   sheet = ss.insertSheet(DASHBOARD_SHEET_NAME, 0);
+  var numCols = 10;
+  var darkAlt = '#252525'; // slightly lighter than #1A1A1A for alternating stat cards
 
-  // ── Stats Row (Row 1) ──
-  var statsLabels = ['TOTAL FILES', 'STORAGE USED', 'THIS WEEK', 'TOP SENDER', 'DUPLICATES FOUND'];
-  sheet.getRange(1, 1, 1, 5).setValues([['0', '0 KB', '0', '—', '0']]);
-  sheet.getRange(2, 1, 1, 5).setValues([statsLabels]);
-
-  // Style stats values (row 1) — large, bold, gold
-  var statsValueRange = sheet.getRange(1, 1, 1, 5);
-  statsValueRange
+  // ═══════════════════════════════════════════
+  // ROW 1 — Dashboard Title Bar
+  // ═══════════════════════════════════════════
+  sheet.getRange(1, 1, 1, numCols).merge();
+  sheet.getRange(1, 1)
+    .setValue('📊  ATTACHMENT DASHBOARD')
     .setFontFamily('Roboto Mono')
-    .setFontSize(20)
+    .setFontSize(14)
     .setFontWeight('bold')
     .setFontColor(BRAND.gold)
     .setBackground(BRAND.darkBg)
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(1, 52);
+  sheet.setRowHeight(1, 40);
+  // Gold bottom border on title
+  sheet.getRange(1, 1, 1, numCols).setBorder(null, null, true, null, null, null, BRAND.gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
-  // Style stats labels (row 2) — tiny uppercase
-  var statsLabelRange = sheet.getRange(2, 1, 1, 5);
-  statsLabelRange
-    .setFontFamily('Roboto Mono')
-    .setFontSize(8)
-    .setFontWeight('bold')
-    .setFontColor('#888888')
-    .setBackground(BRAND.darkBg)
-    .setHorizontalAlignment('center')
-    .setVerticalAlignment('top');
-  sheet.setRowHeight(2, 22);
+  // ═══════════════════════════════════════════
+  // ROWS 2-3 — Stat Cards (value + label pairs)
+  // Each stat spans 2 columns for breathing room
+  // ═══════════════════════════════════════════
+  var statConfigs = [
+    { value: '0', label: 'TOTAL FILES', cols: [1, 2], bg: BRAND.darkBg },
+    { value: '0 KB', label: 'STORAGE USED', cols: [3, 4], bg: darkAlt },
+    { value: '0', label: 'THIS WEEK', cols: [5, 6], bg: BRAND.darkBg },
+    { value: '—', label: 'TOP SENDER', cols: [7, 8], bg: darkAlt },
+    { value: '0', label: 'DUPLICATES', cols: [9, 10], bg: BRAND.darkBg },
+  ];
 
-  // Extend dark bg across remaining columns in stats rows
-  var maxStatsCols = 10;
-  if (maxStatsCols > 5) {
-    sheet.getRange(1, 6, 1, maxStatsCols - 5).setBackground(BRAND.darkBg);
-    sheet.getRange(2, 6, 1, maxStatsCols - 5).setBackground(BRAND.darkBg);
+  for (var s = 0; s < statConfigs.length; s++) {
+    var stat = statConfigs[s];
+    var col1 = stat.cols[0];
+    var col2 = stat.cols[1];
+
+    // Merge value cells (row 2)
+    sheet.getRange(2, col1, 1, 2).merge();
+    sheet.getRange(2, col1)
+      .setValue(stat.value)
+      .setFontFamily('Roboto Mono')
+      .setFontSize(22)
+      .setFontWeight('bold')
+      .setFontColor(BRAND.gold)
+      .setBackground(stat.bg)
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('bottom');
+
+    // Merge label cells (row 3)
+    sheet.getRange(3, col1, 1, 2).merge();
+    sheet.getRange(3, col1)
+      .setValue(stat.label)
+      .setFontFamily('Roboto Mono')
+      .setFontSize(8)
+      .setFontWeight('bold')
+      .setFontColor('#777777')
+      .setBackground(stat.bg)
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('top');
+
+    // Subtle side borders between stat cards
+    if (s > 0) {
+      sheet.getRange(2, col1, 2, 1).setBorder(null, true, null, null, null, null, '#333333', SpreadsheetApp.BorderStyle.SOLID);
+    }
   }
 
-  // ── Data Headers (Row 3) ──
+  sheet.setRowHeight(2, 48);
+  sheet.setRowHeight(3, 20);
+
+  // Gold bottom border under stats section
+  sheet.getRange(3, 1, 1, numCols).setBorder(null, null, true, null, null, null, BRAND.gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+
+  // ═══════════════════════════════════════════
+  // ROW 4 — Brand bar
+  // ═══════════════════════════════════════════
+  sheet.getRange(4, 1, 1, numCols).merge();
+  sheet.getRange(4, 1)
+    .setValue('🕷 TAKScripts — Attachment Auto-Saver v2.0')
+    .setFontFamily('Roboto')
+    .setFontSize(9)
+    .setFontColor('#555555')
+    .setBackground('#141414')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle')
+    .setFontStyle('italic');
+  sheet.setRowHeight(4, 24);
+
+  // ═══════════════════════════════════════════
+  // ROW 5 — Spacer
+  // ═══════════════════════════════════════════
+  sheet.getRange(5, 1, 1, numCols).setBackground(BRAND.white);
+  sheet.setRowHeight(5, 6);
+
+  // ═══════════════════════════════════════════
+  // ROW 6 — Data Headers
+  // ═══════════════════════════════════════════
   var headers = [
     'Date Saved', 'Sender', 'Email Subject', 'Filename',
     'Category', 'File Type', 'Size', 'Drive Link',
@@ -270,14 +329,22 @@ function getOrCreateDashboard_(ss) {
     .setFontColor(BRAND.gold)
     .setFontFamily('Roboto Mono')
     .setFontSize(10)
-    .setHorizontalAlignment('left')
+    .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(DASHBOARD_HEADER_ROW, 32);
+  sheet.setRowHeight(DASHBOARD_HEADER_ROW, 34);
 
-  // Freeze header rows
+  // Bottom border on headers — gold accent
+  headerRange.setBorder(null, null, true, null, null, null, BRAND.gold, SpreadsheetApp.BorderStyle.SOLID);
+
+  // Side borders between header cells — subtle
+  headerRange.setBorder(null, null, null, null, true, null, '#333333', SpreadsheetApp.BorderStyle.SOLID);
+
+  // Freeze all header rows (title + stats + headers)
   sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
 
-  // Column widths
+  // ═══════════════════════════════════════════
+  // Column Widths
+  // ═══════════════════════════════════════════
   sheet.setColumnWidth(1, 160);  // Date
   sheet.setColumnWidth(2, 200);  // Sender
   sheet.setColumnWidth(3, 280);  // Subject
@@ -286,18 +353,22 @@ function getOrCreateDashboard_(ss) {
   sheet.setColumnWidth(6, 120);  // File Type
   sheet.setColumnWidth(7, 80);   // Size
   sheet.setColumnWidth(8, 120);  // Drive Link
-  sheet.setColumnWidth(9, 90);   // Duplicate?
-  sheet.setColumnWidth(10, 130); // Organization
+  sheet.setColumnWidth(9, 100);  // Duplicate?
+  sheet.setColumnWidth(10, 140); // Organization
 
-  // ── Footer ──
+  // ═══════════════════════════════════════════
+  // Footer
+  // ═══════════════════════════════════════════
   var footerRow = DASHBOARD_HEADER_ROW + 2;
-  sheet.getRange(footerRow, 1).setValue('Powered by TAKScripts · takscripts.store');
-  sheet.getRange(footerRow, 1, 1, headers.length)
+  sheet.getRange(footerRow, 1, 1, numCols).merge();
+  sheet.getRange(footerRow, 1)
+    .setValue('Powered by TAKScripts · takscripts.store')
     .setFontFamily('Roboto')
     .setFontSize(9)
     .setFontColor('#CCCCCC')
     .setFontStyle('italic')
-    .setBackground(BRAND.white);
+    .setBackground(BRAND.white)
+    .setHorizontalAlignment('center');
 
   // Move dashboard to first position
   ss.setActiveSheet(sheet);
@@ -320,7 +391,12 @@ function refreshDashboardStats() {
   var lastRow = sheet.getLastRow();
   var dataStartRow = DASHBOARD_HEADER_ROW + 1;
   if (lastRow < dataStartRow) {
-    sheet.getRange(1, 1, 1, 5).setValues([['0', '0 KB', '0', '—', '0']]);
+    // Reset all stat values (row 2, merged cells at columns 1,3,5,7,9)
+    sheet.getRange(2, 1).setValue('0');
+    sheet.getRange(2, 3).setValue('0 KB');
+    sheet.getRange(2, 5).setValue('0');
+    sheet.getRange(2, 7).setValue('—');
+    sheet.getRange(2, 9).setValue('0');
     return;
   }
 
@@ -337,33 +413,28 @@ function refreshDashboardStats() {
 
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
-    if (!row[0] || row[0] === '') continue; // Skip empty/footer rows
+    if (!row[0] || row[0] === '') continue;
 
     totalFiles++;
 
-    // Parse size
     var sizeStr = String(row[6]);
     totalSizeBytes += parseSizeToBytes_(sizeStr);
 
-    // Check if this week
     var dateVal = row[0];
     if (dateVal instanceof Date && dateVal >= weekAgo) {
       filesThisWeek++;
     }
 
-    // Count senders
     var sender = String(row[1]);
     if (sender) {
       senderCounts[sender] = (senderCounts[sender] || 0) + 1;
     }
 
-    // Count duplicates
     if (String(row[8]).toLowerCase() === 'yes') {
       duplicates++;
     }
   }
 
-  // Find top sender
   var topSender = '—';
   var topCount = 0;
   for (var s in senderCounts) {
@@ -372,16 +443,14 @@ function refreshDashboardStats() {
       topSender = s;
     }
   }
-  // Truncate long sender names
-  if (topSender.length > 25) topSender = topSender.substring(0, 22) + '...';
+  if (topSender.length > 20) topSender = topSender.substring(0, 17) + '...';
 
-  sheet.getRange(1, 1, 1, 5).setValues([[
-    String(totalFiles),
-    formatFileSize_(totalSizeBytes),
-    String(filesThisWeek),
-    topSender,
-    String(duplicates)
-  ]]);
+  // Update stat values (row 2, merged cells at columns 1,3,5,7,9)
+  sheet.getRange(2, 1).setValue(String(totalFiles));
+  sheet.getRange(2, 3).setValue(formatFileSize_(totalSizeBytes));
+  sheet.getRange(2, 5).setValue(String(filesThisWeek));
+  sheet.getRange(2, 7).setValue(topSender);
+  sheet.getRange(2, 9).setValue(String(duplicates));
 }
 
 /**
@@ -702,6 +771,9 @@ function writeToDashboard_(sheet, rows) {
       .setVerticalAlignment('middle')
       .setBackground(bgColor);
 
+    // Table borders — subtle gray grid
+    rowRange.setBorder(null, null, true, null, true, null, BRAND.border, SpreadsheetApp.BorderStyle.SOLID);
+
     // Date formatting
     sheet.getRange(rowNum, 1).setNumberFormat('yyyy-mm-dd hh:mm');
 
@@ -783,13 +855,15 @@ function removeFooter_(sheet) {
  * Adds the branded footer row.
  */
 function addFooter_(sheet, footerRow) {
-  sheet.getRange(footerRow, 1).setValue('Powered by TAKScripts · takscripts.store');
-  sheet.getRange(footerRow, 1, 1, 10)
+  sheet.getRange(footerRow, 1, 1, 10).merge();
+  sheet.getRange(footerRow, 1)
+    .setValue('Powered by TAKScripts · takscripts.store')
     .setFontFamily('Roboto')
     .setFontSize(9)
     .setFontColor('#CCCCCC')
     .setFontStyle('italic')
-    .setBackground(BRAND.white);
+    .setBackground(BRAND.white)
+    .setHorizontalAlignment('center');
 }
 
 // ═══════════════════════════════════════════
