@@ -2,22 +2,23 @@
  * Attachment Auto-Saver by TAKScripts
  * =====================================
  * Automatically scans Gmail for emails with attachments and saves them
- * to organized Google Drive folders.
+ * to organized Google Drive folders. The Sheet becomes your searchable
+ * attachment index — find any file by sender, date, type, or category.
  *
  * Features:
  * - Custom menu in Sheets — no need to touch the script editor
  * - Beautiful settings sidebar for configuration
+ * - Full attachment dashboard with stats, search, and clickable Drive links
+ * - Auto-categorization: Invoice, Contract, Receipt, Image, Report, etc.
  * - Multiple organization modes: by sender, label, date, or file type
  * - File type filtering (PDFs only, images only, etc.)
- * - Max file size limit to skip large attachments
- * - Duplicate filename handling with (1), (2), etc.
+ * - Duplicate detection across emails
  * - Skips inline images (signatures, logos) — only saves real attachments
  * - Tracks processed messages to prevent duplicate saves
  * - Test Run mode — preview what would be saved without saving
  * - Scheduled auto-save via time-driven triggers
- * - Full save log with Drive links
  *
- * Version: 1.0
+ * Version: 2.0
  * By TAK Ventures — takscripts.store
  */
 
@@ -25,13 +26,29 @@
 // CONSTANTS
 // ═══════════════════════════════════════════
 
-var ROOT_FOLDER_NAME = '\uD83D\uDCCE TAKScripts \u2014 Saved Attachments';
-var LOG_SHEET_NAME = '\uD83D\uDCCB Save Log';
-var SETTINGS_SHEET_NAME = '\u2699\uFE0F Settings';
+var ROOT_FOLDER_NAME = '📎 TAKScripts — Saved Attachments';
+var DASHBOARD_SHEET_NAME = '📊 Attachment Dashboard';
+var SETTINGS_SHEET_NAME = '⚙️ Settings';
 var PROP_SETTINGS = 'atas_settings';
 var PROP_PROCESSED = 'atas_processed_ids';
-var MAX_PROCESSED_IDS = 5000; // Cap stored IDs to avoid property size limits
-var BATCH_SIZE = 50; // Max threads to process per run
+var MAX_PROCESSED_IDS = 5000;
+var BATCH_SIZE = 50;
+var DASHBOARD_HEADER_ROW = 3; // Row where data headers start (rows 1-2 are stats)
+
+// Brand colors
+var BRAND = {
+  darkBg: '#1A1A1A',
+  gold: '#C9A84C',
+  white: '#FFFFFF',
+  lightGray: '#F9F9F9',
+  medGray: '#666666',
+  border: '#E0E0E0',
+  successBg: '#E8F5E9', successText: '#2E7D32',
+  warningBg: '#FFF8E1', warningText: '#F57F17',
+  errorBg: '#FFEBEE', errorText: '#C62828',
+  infoBg: '#E3F2FD', infoText: '#1565C0',
+  accentRow: '#FFF8E7',
+};
 
 // File type filter groups
 var FILE_TYPE_GROUPS = {
@@ -45,24 +62,37 @@ var FILE_TYPE_GROUPS = {
   'video': { label: 'Video', extensions: ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'webm'] },
 };
 
+// Auto-categorization patterns
+var CATEGORY_PATTERNS = {
+  'Invoice': [/invoice/i, /bill/i, /factur/i, /inv[\-_\s]?\d/i],
+  'Receipt': [/receipt/i, /payment\s*(confirm|proof)/i, /order\s*confirm/i, /purchase/i],
+  'Contract': [/contract/i, /agreement/i, /nda/i, /terms/i, /legal/i, /signed/i],
+  'Report': [/report/i, /analytics/i, /summary/i, /statement/i, /audit/i],
+  'Proposal': [/proposal/i, /quote/i, /estimate/i, /bid/i, /rfp/i],
+  'Resume': [/resume/i, /cv/i, /curriculum/i, /cover\s*letter/i],
+  'Image': [/\.jpg$/i, /\.jpeg$/i, /\.png$/i, /\.gif$/i, /\.svg$/i, /\.webp$/i, /photo/i, /screenshot/i],
+  'Presentation': [/\.pptx?$/i, /\.key$/i, /deck/i, /presentation/i, /slides/i],
+  'Spreadsheet': [/\.xlsx?$/i, /\.csv$/i, /\.ods$/i, /spreadsheet/i, /budget/i, /tracker/i],
+};
+
 // ═══════════════════════════════════════════
 // MENU & UI
 // ═══════════════════════════════════════════
 
 /**
  * Creates the TAKScripts menu when the spreadsheet opens.
- * This runs automatically — no setup needed.
  */
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
-  ui.createMenu('\uD83D\uDD77 TAKScripts')
-    .addItem('\u2699\uFE0F Settings', 'showSettings')
-    .addItem('\u25B6\uFE0F Save Attachments Now', 'saveAttachmentsNow')
+  ui.createMenu('🕷 TAKScripts')
+    .addItem('⚙️ Settings', 'showSettings')
+    .addItem('▶️ Save Attachments Now', 'saveAttachmentsNow')
     .addSeparator()
-    .addItem('\uD83E\uDDEA Test Run', 'testRun')
-    .addItem('\uD83D\uDCCA View Save Log', 'viewLog')
+    .addItem('🧪 Test Run', 'testRun')
+    .addItem('📊 View Dashboard', 'viewDashboard')
+    .addItem('🔄 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
-    .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
+    .addItem('ℹ️ About TAKScripts', 'showAbout')
     .addToUi();
 }
 
@@ -82,9 +112,9 @@ function showSettings() {
 function showAbout() {
   var html = HtmlService.createHtmlOutput(
     '<div style="font-family: \'Segoe UI\', system-ui, sans-serif; padding: 20px; text-align: center;">' +
-      '<div style="font-size: 32px; margin-bottom: 8px;">\uD83D\uDD77</div>' +
+      '<div style="font-size: 32px; margin-bottom: 8px;">🕷</div>' +
       '<h2 style="margin: 0 0 4px; font-size: 18px;">Attachment Auto-Saver</h2>' +
-      '<p style="color: #666; font-size: 12px; margin: 0 0 16px;">Version 1.0 \u00B7 by TAK Ventures</p>' +
+      '<p style="color: #666; font-size: 12px; margin: 0 0 16px;">Version 2.0 · by TAK Ventures</p>' +
       '<hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;">' +
       '<p style="font-size: 13px; color: #333; line-height: 1.6;">' +
         'Part of the <strong>TAKScripts</strong> collection.<br>' +
@@ -93,7 +123,7 @@ function showAbout() {
       '<p style="margin-top: 16px;">' +
         '<a href="https://takscripts.store" target="_blank" ' +
            'style="color: #C9A84C; text-decoration: none; font-weight: 600; font-size: 13px;">' +
-          'takscripts.store \u2192' +
+          'takscripts.store →' +
         '</a>' +
       '</p>' +
     '</div>'
@@ -102,13 +132,13 @@ function showAbout() {
 }
 
 /**
- * Navigates to or creates the save log sheet.
+ * Navigates to the dashboard sheet.
  */
-function viewLog() {
+function viewDashboard() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(LOG_SHEET_NAME);
+  var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('No save log yet. Run "Save Attachments Now" and saved files will be logged here.');
+    SpreadsheetApp.getUi().alert('No dashboard yet. Run "Save Attachments Now" to start tracking attachments.');
     return;
   }
   ss.setActiveSheet(sheet);
@@ -127,10 +157,10 @@ function getDefaultSettings_() {
     sourceLabel: '',
     destinationFolderId: '',
     destinationFolderName: '',
-    organizationMode: 'sender',   // sender, label, date, filetype
-    fileTypeFilters: [],           // empty = all types
-    maxFileSizeMB: 25,             // 0 = no limit
-    autoSchedule: 'off',          // off, hourly, every6hours, daily
+    organizationMode: 'sender',
+    fileTypeFilters: [],
+    maxFileSizeMB: 25,
+    autoSchedule: 'off',
     skipInlineImages: true,
   };
 }
@@ -141,10 +171,7 @@ function getDefaultSettings_() {
 function saveSettings(settings) {
   var props = PropertiesService.getScriptProperties();
   props.setProperty(PROP_SETTINGS, JSON.stringify(settings));
-
-  // Update trigger based on schedule setting
   updateScheduleTrigger_(settings.autoSchedule);
-
   return { success: true };
 }
 
@@ -154,23 +181,17 @@ function saveSettings(settings) {
 function loadSettings() {
   var props = PropertiesService.getScriptProperties();
   var raw = props.getProperty(PROP_SETTINGS);
-  if (!raw) {
-    return getDefaultSettings_();
-  }
+  if (!raw) return getDefaultSettings_();
   var saved = JSON.parse(raw);
   var defaults = getDefaultSettings_();
-  // Merge with defaults so new properties are always present
   for (var key in defaults) {
-    if (saved[key] === undefined) {
-      saved[key] = defaults[key];
-    }
+    if (saved[key] === undefined) saved[key] = defaults[key];
   }
   return saved;
 }
 
 /**
- * Lets the user pick a destination folder from Drive via the sidebar.
- * Returns folder info to the sidebar.
+ * Validates a Drive folder ID.
  */
 function pickDestinationFolder(folderId) {
   try {
@@ -182,28 +203,229 @@ function pickDestinationFolder(folderId) {
 }
 
 // ═══════════════════════════════════════════
+// DASHBOARD — THE HEART OF THE PRODUCT
+// ═══════════════════════════════════════════
+
+/**
+ * Creates or gets the dashboard sheet with branded design.
+ * Row 1: Stats bar (Total Files | Storage Used | Files This Week | Top Sender | Duplicates Found)
+ * Row 2: Spacer
+ * Row 3: Data headers
+ * Row 4+: Attachment data
+ */
+function getOrCreateDashboard_(ss) {
+  var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(DASHBOARD_SHEET_NAME, 0);
+
+  // ── Stats Row (Row 1) ──
+  var statsLabels = ['TOTAL FILES', 'STORAGE USED', 'THIS WEEK', 'TOP SENDER', 'DUPLICATES FOUND'];
+  sheet.getRange(1, 1, 1, 5).setValues([['0', '0 KB', '0', '—', '0']]);
+  sheet.getRange(2, 1, 1, 5).setValues([statsLabels]);
+
+  // Style stats values (row 1) — large, bold, gold
+  var statsValueRange = sheet.getRange(1, 1, 1, 5);
+  statsValueRange
+    .setFontFamily('Roboto Mono')
+    .setFontSize(20)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 52);
+
+  // Style stats labels (row 2) — tiny uppercase
+  var statsLabelRange = sheet.getRange(2, 1, 1, 5);
+  statsLabelRange
+    .setFontFamily('Roboto Mono')
+    .setFontSize(8)
+    .setFontWeight('bold')
+    .setFontColor('#888888')
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('top');
+  sheet.setRowHeight(2, 22);
+
+  // Extend dark bg across remaining columns in stats rows
+  var maxStatsCols = 10;
+  if (maxStatsCols > 5) {
+    sheet.getRange(1, 6, 1, maxStatsCols - 5).setBackground(BRAND.darkBg);
+    sheet.getRange(2, 6, 1, maxStatsCols - 5).setBackground(BRAND.darkBg);
+  }
+
+  // ── Data Headers (Row 3) ──
+  var headers = [
+    'Date Saved', 'Sender', 'Email Subject', 'Filename',
+    'Category', 'File Type', 'Size', 'Drive Link',
+    'Duplicate?', 'Organization'
+  ];
+  sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, headers.length).setValues([headers]);
+
+  var headerRange = sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, headers.length);
+  headerRange
+    .setFontWeight('bold')
+    .setBackground(BRAND.darkBg)
+    .setFontColor(BRAND.gold)
+    .setFontFamily('Roboto Mono')
+    .setFontSize(10)
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(DASHBOARD_HEADER_ROW, 32);
+
+  // Freeze header rows
+  sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
+
+  // Column widths
+  sheet.setColumnWidth(1, 160);  // Date
+  sheet.setColumnWidth(2, 200);  // Sender
+  sheet.setColumnWidth(3, 280);  // Subject
+  sheet.setColumnWidth(4, 240);  // Filename
+  sheet.setColumnWidth(5, 110);  // Category
+  sheet.setColumnWidth(6, 120);  // File Type
+  sheet.setColumnWidth(7, 80);   // Size
+  sheet.setColumnWidth(8, 120);  // Drive Link
+  sheet.setColumnWidth(9, 90);   // Duplicate?
+  sheet.setColumnWidth(10, 130); // Organization
+
+  // ── Footer ──
+  var footerRow = DASHBOARD_HEADER_ROW + 2;
+  sheet.getRange(footerRow, 1).setValue('Powered by TAKScripts · takscripts.store');
+  sheet.getRange(footerRow, 1, 1, headers.length)
+    .setFontFamily('Roboto')
+    .setFontSize(9)
+    .setFontColor('#CCCCCC')
+    .setFontStyle('italic')
+    .setBackground(BRAND.white);
+
+  // Move dashboard to first position
+  ss.setActiveSheet(sheet);
+  ss.moveActiveSheet(1);
+
+  return sheet;
+}
+
+/**
+ * Refreshes the dashboard stats bar (row 1) from the data.
+ */
+function refreshDashboardStats() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('No dashboard yet. Run "Save Attachments Now" first.');
+    return;
+  }
+
+  var lastRow = sheet.getLastRow();
+  var dataStartRow = DASHBOARD_HEADER_ROW + 1;
+  if (lastRow < dataStartRow) {
+    sheet.getRange(1, 1, 1, 5).setValues([['0', '0 KB', '0', '—', '0']]);
+    return;
+  }
+
+  var numDataRows = lastRow - dataStartRow + 1;
+  var data = sheet.getRange(dataStartRow, 1, numDataRows, 10).getValues();
+
+  var totalFiles = 0;
+  var totalSizeBytes = 0;
+  var filesThisWeek = 0;
+  var senderCounts = {};
+  var duplicates = 0;
+  var now = new Date();
+  var weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    if (!row[0] || row[0] === '') continue; // Skip empty/footer rows
+
+    totalFiles++;
+
+    // Parse size
+    var sizeStr = String(row[6]);
+    totalSizeBytes += parseSizeToBytes_(sizeStr);
+
+    // Check if this week
+    var dateVal = row[0];
+    if (dateVal instanceof Date && dateVal >= weekAgo) {
+      filesThisWeek++;
+    }
+
+    // Count senders
+    var sender = String(row[1]);
+    if (sender) {
+      senderCounts[sender] = (senderCounts[sender] || 0) + 1;
+    }
+
+    // Count duplicates
+    if (String(row[8]).toLowerCase() === 'yes') {
+      duplicates++;
+    }
+  }
+
+  // Find top sender
+  var topSender = '—';
+  var topCount = 0;
+  for (var s in senderCounts) {
+    if (senderCounts[s] > topCount) {
+      topCount = senderCounts[s];
+      topSender = s;
+    }
+  }
+  // Truncate long sender names
+  if (topSender.length > 25) topSender = topSender.substring(0, 22) + '...';
+
+  sheet.getRange(1, 1, 1, 5).setValues([[
+    String(totalFiles),
+    formatFileSize_(totalSizeBytes),
+    String(filesThisWeek),
+    topSender,
+    String(duplicates)
+  ]]);
+}
+
+/**
+ * Parses a human-readable size string back to bytes.
+ */
+function parseSizeToBytes_(sizeStr) {
+  if (!sizeStr) return 0;
+  var match = String(sizeStr).match(/([\d.]+)\s*(B|KB|MB|GB)/i);
+  if (!match) return 0;
+  var num = parseFloat(match[1]);
+  var unit = match[2].toUpperCase();
+  switch (unit) {
+    case 'B': return num;
+    case 'KB': return num * 1024;
+    case 'MB': return num * 1024 * 1024;
+    case 'GB': return num * 1024 * 1024 * 1024;
+    default: return 0;
+  }
+}
+
+// ═══════════════════════════════════════════
 // CORE ENGINE
 // ═══════════════════════════════════════════
 
 /**
  * Main entry point — called by menu or trigger.
- * Scans Gmail, saves attachments to Drive, logs results.
  */
 function saveAttachmentsNow() {
   var result = processAttachments_(false);
-  var msg = '\u2705 Attachment Auto-Saver Complete\n\n' +
+  var msg = '✅ Attachment Auto-Saver Complete\n\n' +
     'Threads scanned: ' + result.threadsScanned + '\n' +
     'Files saved: ' + result.filesSaved + '\n' +
     'Files skipped: ' + result.filesSkipped + '\n' +
+    'Duplicates found: ' + result.duplicatesFound + '\n' +
     'Errors: ' + result.errors;
   if (result.filesSaved > 0) {
     msg += '\n\nFiles saved to: ' + result.rootFolderName;
+    msg += '\nDashboard updated with ' + result.filesSaved + ' new entries.';
   }
   SpreadsheetApp.getUi().alert(msg);
 }
 
 /**
- * Trigger handler — same as saveAttachmentsNow but no UI alert.
+ * Trigger handler — same logic, no UI alert.
  */
 function autoSaveAttachments() {
   processAttachments_(false);
@@ -216,10 +438,11 @@ function testRun() {
   var result = processAttachments_(true);
 
   var lines = [
-    '\uD83E\uDDEA TEST RUN \u2014 No files were saved',
+    '🧪 TEST RUN — No files were saved',
     'Threads scanned: ' + result.threadsScanned,
     'Files that would be saved: ' + result.filesSaved,
     'Files that would be skipped: ' + result.filesSkipped,
+    'Potential duplicates: ' + result.duplicatesFound,
     '---',
   ];
 
@@ -230,7 +453,8 @@ function testRun() {
     lines.push('From: ' + d.sender);
     for (var j = 0; j < d.attachments.length; j++) {
       var a = d.attachments[j];
-      var status = a.wouldSave ? '\u2192 WOULD SAVE' : '\u2192 SKIP (' + a.skipReason + ')';
+      var status = a.wouldSave ? '→ WOULD SAVE [' + a.category + ']' : '→ SKIP (' + a.skipReason + ')';
+      if (a.isDuplicate) status += ' ⚠️ DUPLICATE';
       lines.push('  ' + a.name + ' (' + formatFileSize_(a.size) + ') ' + status);
     }
   }
@@ -239,16 +463,11 @@ function testRun() {
     lines.push('No emails with attachments found matching your search criteria.');
   }
 
-  var output = lines.join('\n');
-  Logger.log(output);
-  SpreadsheetApp.getUi().alert(output);
+  SpreadsheetApp.getUi().alert(lines.join('\n'));
 }
 
 /**
- * Core processing function. Handles both real saves and test runs.
- *
- * @param {boolean} dryRun - If true, previews without saving
- * @returns {Object} Summary of the run
+ * Core processing function.
  */
 function processAttachments_(dryRun) {
   var settings = loadSettings();
@@ -271,25 +490,44 @@ function processAttachments_(dryRun) {
     threads = GmailApp.search(query, 0, BATCH_SIZE);
   } catch (e) {
     Logger.log('Gmail search error: ' + e.message);
-    return { threadsScanned: 0, filesSaved: 0, filesSkipped: 0, errors: 1, details: [] };
+    return { threadsScanned: 0, filesSaved: 0, filesSkipped: 0, duplicatesFound: 0, errors: 1, details: [] };
   }
 
-  // Get or create root folder (only if not dry run and we have threads)
+  // Get or create root folder and dashboard
   var rootFolder = null;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var dashboard = null;
+
   if (!dryRun && threads.length > 0) {
     rootFolder = getOrCreateRootFolder_(settings);
+    dashboard = getOrCreateDashboard_(ss);
+  }
+
+  // Load existing filenames for duplicate detection
+  var existingFiles = {};
+  if (dashboard) {
+    var lastRow = dashboard.getLastRow();
+    if (lastRow > DASHBOARD_HEADER_ROW) {
+      var existingData = dashboard.getRange(DASHBOARD_HEADER_ROW + 1, 4, lastRow - DASHBOARD_HEADER_ROW, 1).getValues();
+      for (var e = 0; e < existingData.length; e++) {
+        var fn = String(existingData[e][0]).toLowerCase();
+        if (fn) existingFiles[fn] = true;
+      }
+    }
   }
 
   var result = {
     threadsScanned: threads.length,
     filesSaved: 0,
     filesSkipped: 0,
+    duplicatesFound: 0,
     errors: 0,
     rootFolderName: ROOT_FOLDER_NAME,
     details: [],
   };
 
   var newProcessedIds = [];
+  var newRows = [];
 
   for (var t = 0; t < threads.length; t++) {
     var messages = threads[t].getMessages();
@@ -298,7 +536,6 @@ function processAttachments_(dryRun) {
       var message = messages[m];
       var messageId = message.getId();
 
-      // Skip already processed messages
       if (processedSet[messageId]) continue;
 
       var attachments = message.getAttachments();
@@ -308,23 +545,21 @@ function processAttachments_(dryRun) {
       var senderName = extractName_(message.getFrom());
       var subject = message.getSubject() || '(no subject)';
       var messageDate = message.getDate();
+      var senderDisplay = senderName ? senderName : senderEmail;
 
       var detail = {
         subject: subject,
-        sender: senderName ? senderName + ' <' + senderEmail + '>' : senderEmail,
+        sender: senderDisplay,
         attachments: [],
       };
 
-      // Get labels for this thread (used by label organization mode)
       var threadLabels = [];
       try {
         var labels = threads[t].getLabels();
         for (var l = 0; l < labels.length; l++) {
           threadLabels.push(labels[l].getName());
         }
-      } catch (e) {
-        // Labels may not be accessible in some contexts
-      }
+      } catch (e) { /* Labels may not be accessible */ }
 
       for (var a = 0; a < attachments.length; a++) {
         var attachment = attachments[a];
@@ -332,13 +567,21 @@ function processAttachments_(dryRun) {
         var fileSize = attachment.getSize();
         var contentType = attachment.getContentType();
 
-        // Check if inline image (skip signatures/logos)
         var skipReason = shouldSkipAttachment_(attachment, settings, fileName, fileSize, contentType);
+
+        // Auto-categorize
+        var category = categorizeAttachment_(fileName, subject, contentType);
+
+        // Duplicate detection
+        var isDuplicate = existingFiles[fileName.toLowerCase()] || false;
+        if (isDuplicate) result.duplicatesFound++;
 
         var attachDetail = {
           name: fileName,
           size: fileSize,
           type: contentType,
+          category: category,
+          isDuplicate: isDuplicate,
           wouldSave: !skipReason,
           skipReason: skipReason || '',
         };
@@ -356,16 +599,25 @@ function processAttachments_(dryRun) {
             var blob = attachment.copyBlob();
             var savedFile = targetFolder.createFile(blob.setName(safeName));
 
-            logSavedFile_(
-              messageDate,
-              subject,
-              senderEmail,
-              safeName,
-              contentType,
-              fileSize,
-              savedFile.getUrl()
-            );
+            // Determine organization path
+            var orgPath = getOrganizationPath_(settings, senderEmail, senderName, threadLabels, messageDate, fileName);
 
+            // Build row for dashboard
+            newRows.push({
+              date: messageDate,
+              sender: senderDisplay,
+              subject: subject,
+              filename: safeName,
+              category: category,
+              fileType: getFileTypeLabel_(contentType, fileName),
+              size: formatFileSize_(fileSize),
+              sizeBytes: fileSize,
+              driveLink: savedFile.getUrl(),
+              isDuplicate: isDuplicate ? 'Yes' : 'No',
+              orgPath: orgPath,
+            });
+
+            existingFiles[fileName.toLowerCase()] = true;
             result.filesSaved++;
           } catch (e) {
             Logger.log('Error saving ' + fileName + ': ' + e.message);
@@ -386,12 +638,17 @@ function processAttachments_(dryRun) {
     }
   }
 
-  // Save updated processed IDs (cap to MAX_PROCESSED_IDS)
+  // Write rows to dashboard
+  if (!dryRun && newRows.length > 0) {
+    writeToDashboard_(dashboard, newRows);
+    refreshDashboardStats();
+  }
+
+  // Save updated processed IDs
   if (!dryRun && newProcessedIds.length > 0) {
     for (var n = 0; n < newProcessedIds.length; n++) {
       processedArray.push(newProcessedIds[n]);
     }
-    // Keep only the most recent IDs to avoid property size limits
     if (processedArray.length > MAX_PROCESSED_IDS) {
       processedArray = processedArray.slice(processedArray.length - MAX_PROCESSED_IDS);
     }
@@ -402,12 +659,213 @@ function processAttachments_(dryRun) {
 }
 
 // ═══════════════════════════════════════════
+// DASHBOARD WRITING
+// ═══════════════════════════════════════════
+
+/**
+ * Writes new rows to the dashboard with proper styling.
+ */
+function writeToDashboard_(sheet, rows) {
+  // Remove footer row if it exists (we'll re-add it after)
+  removeFooter_(sheet);
+
+  var startRow = sheet.getLastRow() + 1;
+  if (startRow <= DASHBOARD_HEADER_ROW) startRow = DASHBOARD_HEADER_ROW + 1;
+
+  var numCols = 10;
+
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var rowNum = startRow + i;
+
+    var rowData = [
+      r.date,
+      r.sender,
+      r.subject,
+      r.filename,
+      r.category,
+      r.fileType,
+      r.size,
+      '', // Drive link (set as hyperlink formula below)
+      r.isDuplicate,
+      r.orgPath,
+    ];
+
+    sheet.getRange(rowNum, 1, 1, numCols).setValues([rowData]);
+
+    // Style the row
+    var rowRange = sheet.getRange(rowNum, 1, 1, numCols);
+    var bgColor = ((rowNum - DASHBOARD_HEADER_ROW) % 2 === 0) ? BRAND.lightGray : BRAND.white;
+    rowRange
+      .setFontFamily('Roboto')
+      .setFontSize(10)
+      .setVerticalAlignment('middle')
+      .setBackground(bgColor);
+
+    // Date formatting
+    sheet.getRange(rowNum, 1).setNumberFormat('yyyy-mm-dd hh:mm');
+
+    // Category cell — color coded
+    var catCell = sheet.getRange(rowNum, 5);
+    applyCategoryStyle_(catCell, r.category);
+
+    // Drive link as clickable hyperlink
+    if (r.driveLink) {
+      sheet.getRange(rowNum, 8)
+        .setFormula('=HYPERLINK("' + r.driveLink + '","📂 Open")')
+        .setFontColor('#1A73E8')
+        .setHorizontalAlignment('center');
+    }
+
+    // Duplicate cell — highlight if yes
+    var dupCell = sheet.getRange(rowNum, 9);
+    dupCell.setHorizontalAlignment('center');
+    if (r.isDuplicate === 'Yes') {
+      dupCell.setBackground(BRAND.warningBg).setFontColor(BRAND.warningText).setFontWeight('bold');
+    }
+
+    // Size — right align
+    sheet.getRange(rowNum, 7).setHorizontalAlignment('right');
+  }
+
+  // Re-add footer
+  addFooter_(sheet, startRow + rows.length);
+}
+
+/**
+ * Applies category-specific styling to a cell.
+ */
+function applyCategoryStyle_(cell, category) {
+  cell.setHorizontalAlignment('center').setFontWeight('bold').setFontSize(9);
+
+  switch (category) {
+    case 'Invoice':
+    case 'Receipt':
+      cell.setBackground(BRAND.successBg).setFontColor(BRAND.successText);
+      break;
+    case 'Contract':
+    case 'Proposal':
+      cell.setBackground(BRAND.infoBg).setFontColor(BRAND.infoText);
+      break;
+    case 'Report':
+    case 'Spreadsheet':
+      cell.setBackground(BRAND.accentRow).setFontColor(BRAND.warningText);
+      break;
+    case 'Resume':
+      cell.setBackground('#F3E5F5').setFontColor('#7B1FA2');
+      break;
+    case 'Image':
+    case 'Presentation':
+      cell.setBackground('#E8EAF6').setFontColor('#283593');
+      break;
+    default: // General
+      cell.setBackground('#F5F5F5').setFontColor('#616161');
+  }
+}
+
+/**
+ * Removes the footer row.
+ */
+function removeFooter_(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= DASHBOARD_HEADER_ROW) return;
+
+  for (var r = lastRow; r > DASHBOARD_HEADER_ROW; r--) {
+    var val = sheet.getRange(r, 1).getValue();
+    if (String(val).indexOf('Powered by') === 0) {
+      sheet.deleteRow(r);
+      break;
+    }
+  }
+}
+
+/**
+ * Adds the branded footer row.
+ */
+function addFooter_(sheet, footerRow) {
+  sheet.getRange(footerRow, 1).setValue('Powered by TAKScripts · takscripts.store');
+  sheet.getRange(footerRow, 1, 1, 10)
+    .setFontFamily('Roboto')
+    .setFontSize(9)
+    .setFontColor('#CCCCCC')
+    .setFontStyle('italic')
+    .setBackground(BRAND.white);
+}
+
+// ═══════════════════════════════════════════
+// AUTO-CATEGORIZATION
+// ═══════════════════════════════════════════
+
+/**
+ * Categorizes an attachment based on filename, subject, and content type.
+ */
+function categorizeAttachment_(fileName, subject, contentType) {
+  var testString = fileName + ' ' + subject;
+
+  for (var category in CATEGORY_PATTERNS) {
+    var patterns = CATEGORY_PATTERNS[category];
+    for (var i = 0; i < patterns.length; i++) {
+      if (patterns[i].test(testString)) {
+        return category;
+      }
+    }
+  }
+
+  // Fall back to content type
+  if (contentType) {
+    if (contentType.match(/^image\//i)) return 'Image';
+    if (contentType.match(/pdf/i)) return 'Document';
+    if (contentType.match(/spreadsheet|excel|csv/i)) return 'Spreadsheet';
+    if (contentType.match(/presentation|powerpoint/i)) return 'Presentation';
+    if (contentType.match(/video\//i)) return 'Video';
+    if (contentType.match(/audio\//i)) return 'Audio';
+  }
+
+  return 'General';
+}
+
+/**
+ * Returns a human-readable file type label.
+ */
+function getFileTypeLabel_(contentType, fileName) {
+  var ext = getFileExtension_(fileName).toUpperCase();
+  if (ext) return ext;
+  if (!contentType) return 'Unknown';
+
+  if (contentType.match(/pdf/i)) return 'PDF';
+  if (contentType.match(/image\//i)) return 'Image';
+  if (contentType.match(/video\//i)) return 'Video';
+  if (contentType.match(/audio\//i)) return 'Audio';
+  if (contentType.match(/zip|archive|compressed/i)) return 'Archive';
+  return 'File';
+}
+
+/**
+ * Returns the organization path string for display in the dashboard.
+ */
+function getOrganizationPath_(settings, senderEmail, senderName, labels, messageDate, fileName) {
+  switch (settings.organizationMode) {
+    case 'sender':
+      return '📁 ' + (senderName || senderEmail);
+    case 'label':
+      return '🏷 ' + (labels.length > 0 ? labels[0] : 'Unlabeled');
+    case 'date':
+      var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return '📅 ' + messageDate.getFullYear() + '/' + monthNames[messageDate.getMonth()];
+    case 'filetype':
+      var ext = getFileExtension_(fileName).toLowerCase();
+      return '📄 ' + getFileTypeCategory_(ext);
+    default:
+      return '📁 Attachments';
+  }
+}
+
+// ═══════════════════════════════════════════
 // DRIVE HELPERS
 // ═══════════════════════════════════════════
 
 /**
- * Gets or creates the root "TAKScripts — Saved Attachments" folder.
- * If a custom destination folder is set, creates the root inside it.
+ * Gets or creates the root folder.
  */
 function getOrCreateRootFolder_(settings) {
   var parent;
@@ -415,7 +873,6 @@ function getOrCreateRootFolder_(settings) {
     try {
       parent = DriveApp.getFolderById(settings.destinationFolderId);
     } catch (e) {
-      Logger.log('Custom destination folder not found, using root Drive.');
       parent = DriveApp.getRootFolder();
     }
   } else {
@@ -423,9 +880,7 @@ function getOrCreateRootFolder_(settings) {
   }
 
   var folders = parent.getFoldersByName(ROOT_FOLDER_NAME);
-  if (folders.hasNext()) {
-    return folders.next();
-  }
+  if (folders.hasNext()) return folders.next();
   return parent.createFolder(ROOT_FOLDER_NAME);
 }
 
@@ -437,40 +892,24 @@ function getTargetFolder_(rootFolder, settings, senderEmail, senderName, labels,
 
   switch (settings.organizationMode) {
     case 'sender':
-      // Use sender name if available, otherwise email
       subfolderName = senderName ? senderName + ' (' + senderEmail + ')' : senderEmail;
-      // Clean up folder name
       subfolderName = sanitizeFolderName_(subfolderName);
       break;
-
     case 'label':
-      if (labels.length > 0) {
-        // Use the first non-system label
-        subfolderName = sanitizeFolderName_(labels[0]);
-      } else {
-        subfolderName = 'Unlabeled';
-      }
+      subfolderName = (labels.length > 0) ? sanitizeFolderName_(labels[0]) : 'Unlabeled';
       break;
-
     case 'date':
-      // Organize by YYYY / MM — Month Name
       var year = messageDate.getFullYear().toString();
-      var monthNames = [
-        'January','February','March','April','May','June',
-        'July','August','September','October','November','December',
-      ];
+      var monthNames = ['January','February','March','April','May','June',
+        'July','August','September','October','November','December'];
       var monthNum = ('0' + (messageDate.getMonth() + 1)).slice(-2);
-      var monthFolder = monthNum + ' \u2014 ' + monthNames[messageDate.getMonth()];
-
-      // Get or create year folder
+      var monthFolder = monthNum + ' — ' + monthNames[messageDate.getMonth()];
       var yearFolder = getOrCreateSubfolder_(rootFolder, year);
       return getOrCreateSubfolder_(yearFolder, monthFolder);
-
     case 'filetype':
       var ext = getFileExtension_(fileName).toLowerCase();
       subfolderName = getFileTypeCategory_(ext);
       break;
-
     default:
       subfolderName = 'Attachments';
   }
@@ -478,26 +917,15 @@ function getTargetFolder_(rootFolder, settings, senderEmail, senderName, labels,
   return getOrCreateSubfolder_(rootFolder, subfolderName);
 }
 
-/**
- * Gets or creates a subfolder by name within a parent folder.
- */
 function getOrCreateSubfolder_(parentFolder, name) {
   var folders = parentFolder.getFoldersByName(name);
-  if (folders.hasNext()) {
-    return folders.next();
-  }
+  if (folders.hasNext()) return folders.next();
   return parentFolder.createFolder(name);
 }
 
-/**
- * Returns a unique filename within the folder.
- * If "report.pdf" exists, returns "report (1).pdf", etc.
- */
 function getUniqueFileName_(folder, fileName) {
   var files = folder.getFilesByName(fileName);
-  if (!files.hasNext()) {
-    return fileName;
-  }
+  if (!files.hasNext()) return fileName;
 
   var baseName = fileName;
   var ext = '';
@@ -517,12 +945,7 @@ function getUniqueFileName_(folder, fileName) {
   return candidate;
 }
 
-/**
- * Sanitizes a string for use as a folder name.
- * Removes characters that are invalid in Drive folder names.
- */
 function sanitizeFolderName_(name) {
-  // Remove or replace problematic characters
   return name.replace(/[\/\\:*?"<>|]/g, '_').substring(0, 100);
 }
 
@@ -530,294 +953,110 @@ function sanitizeFolderName_(name) {
 // GMAIL HELPERS
 // ═══════════════════════════════════════════
 
-/**
- * Builds the Gmail search query from settings.
- */
 function buildSearchQuery_(settings) {
   var parts = ['has:attachment'];
-
-  if (settings.sourceLabel) {
-    parts.push('label:' + settings.sourceLabel);
-  }
-
+  if (settings.sourceLabel) parts.push('label:' + settings.sourceLabel);
   if (settings.searchQuery && settings.searchQuery !== 'has:attachment') {
     parts.push(settings.searchQuery);
   }
-
   return parts.join(' ');
 }
 
-/**
- * Determines if an attachment should be skipped.
- * Returns the skip reason string, or null if it should be saved.
- */
 function shouldSkipAttachment_(attachment, settings, fileName, fileSize, contentType) {
-  // Skip inline images (CID-referenced, typically signatures and logos)
-  if (settings.skipInlineImages) {
-    if (isInlineImage_(attachment, contentType)) {
-      return 'inline image';
-    }
+  if (settings.skipInlineImages && isInlineImage_(attachment, contentType)) {
+    return 'inline image';
   }
-
-  // Check file size limit
   if (settings.maxFileSizeMB && settings.maxFileSizeMB > 0) {
     var maxBytes = settings.maxFileSizeMB * 1024 * 1024;
-    if (fileSize > maxBytes) {
-      return 'exceeds ' + settings.maxFileSizeMB + 'MB limit';
-    }
+    if (fileSize > maxBytes) return 'exceeds ' + settings.maxFileSizeMB + 'MB limit';
   }
-
-  // Check file type filters
   if (settings.fileTypeFilters && settings.fileTypeFilters.length > 0) {
     var ext = getFileExtension_(fileName).toLowerCase();
     var allowed = false;
-
     for (var f = 0; f < settings.fileTypeFilters.length; f++) {
       var group = FILE_TYPE_GROUPS[settings.fileTypeFilters[f]];
       if (group) {
         for (var e = 0; e < group.extensions.length; e++) {
-          if (group.extensions[e] === ext) {
-            allowed = true;
-            break;
-          }
+          if (group.extensions[e] === ext) { allowed = true; break; }
         }
       }
       if (allowed) break;
     }
-
-    if (!allowed) {
-      return 'file type not in filter';
-    }
+    if (!allowed) return 'file type not in filter';
   }
-
   return null;
 }
 
-/**
- * Detects if an attachment is an inline image (signature, logo, etc.).
- * Uses content type and Content-ID header heuristics.
- */
 function isInlineImage_(attachment, contentType) {
-  // Only check image types
-  if (!contentType || !contentType.match(/^image\//i)) {
-    return false;
-  }
-
-  // Check if it has a Content-ID (CID), which indicates inline embedding
+  if (!contentType || !contentType.match(/^image\//i)) return false;
   try {
-    var isInline = attachment.isGoogleType ? false : attachment.getContentType().match(/^image\//i);
     var name = attachment.getName().toLowerCase();
-
-    // Common inline image signatures
     var inlinePatterns = [
-      /^image\d{3}\./i,       // image001.png, image002.jpg
-      /^logo/i,               // logo.png
-      /^signature/i,          // signature.png
-      /^icon/i,               // icon.png
-      /^banner/i,             // banner.jpg
-      /^spacer/i,             // spacer.gif
-      /^pixel/i,              // tracking pixel
+      /^image\d{3}\./i, /^logo/i, /^signature/i, /^icon/i,
+      /^banner/i, /^spacer/i, /^pixel/i,
     ];
-
     for (var i = 0; i < inlinePatterns.length; i++) {
-      if (name.match(inlinePatterns[i])) {
-        return true;
-      }
+      if (name.match(inlinePatterns[i])) return true;
     }
-
-    // Very small images are likely inline (under 10KB)
-    if (attachment.getSize() < 10240 && contentType.match(/^image\//i)) {
-      return true;
-    }
-  } catch (e) {
-    // If we can't determine, assume not inline
-  }
-
+    if (attachment.getSize() < 10240 && contentType.match(/^image\//i)) return true;
+  } catch (e) { /* If we can't determine, assume not inline */ }
   return false;
 }
 
-/**
- * Extracts the email address from a "From" field.
- */
 function extractEmail_(fromField) {
   var match = fromField.match(/<(.+?)>/);
   return (match ? match[1] : fromField).toLowerCase().trim();
 }
 
-/**
- * Extracts the display name from a "From" field.
- */
 function extractName_(fromField) {
   var match = fromField.match(/^"?([^"<]+)"?\s*</);
   return match ? match[1].trim() : '';
 }
 
-/**
- * Returns the file extension without the dot.
- */
 function getFileExtension_(fileName) {
   var dotIndex = fileName.lastIndexOf('.');
   if (dotIndex < 0) return '';
   return fileName.substring(dotIndex + 1);
 }
 
-/**
- * Maps a file extension to a human-readable category for folder naming.
- */
 function getFileTypeCategory_(ext) {
   for (var key in FILE_TYPE_GROUPS) {
     var group = FILE_TYPE_GROUPS[key];
     for (var i = 0; i < group.extensions.length; i++) {
-      if (group.extensions[i] === ext) {
-        return group.label;
-      }
+      if (group.extensions[i] === ext) return group.label;
     }
   }
   return 'Other';
 }
 
-/**
- * Formats file size in human-readable form.
- */
 function formatFileSize_(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-}
-
-// ═══════════════════════════════════════════
-// LOGGING
-// ═══════════════════════════════════════════
-
-/**
- * Logs a saved file to the Save Log sheet.
- * Creates the sheet with branded headers if it doesn't exist.
- */
-function logSavedFile_(timestamp, subject, sender, fileName, fileType, fileSize, driveLink) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(LOG_SHEET_NAME);
-
-  if (!sheet) {
-    sheet = createLogSheet_(ss);
-  }
-
-  var row = [
-    timestamp,
-    subject,
-    sender,
-    fileName,
-    fileType,
-    formatFileSize_(fileSize),
-    driveLink,
-  ];
-
-  sheet.appendRow(row);
-
-  // Apply alternating row colors
-  var lastRow = sheet.getLastRow();
-  var numCols = 7;
-  var rowRange = sheet.getRange(lastRow, 1, 1, numCols);
-  var bgColor = (lastRow % 2 === 0) ? '#F9F9F9' : '#FFFFFF';
-  rowRange.setBackground(bgColor)
-    .setFontFamily('Roboto')
-    .setFontSize(10)
-    .setVerticalAlignment('middle');
-
-  // Make the Drive link clickable
-  if (driveLink) {
-    var linkCell = sheet.getRange(lastRow, numCols);
-    linkCell.setFormula('=HYPERLINK("' + driveLink + '","Open in Drive")');
-    linkCell.setFontColor('#1A73E8');
-  }
-}
-
-/**
- * Creates the branded log sheet with styled headers and footer.
- */
-function createLogSheet_(ss) {
-  var sheet = ss.insertSheet(LOG_SHEET_NAME);
-  var headers = ['Timestamp', 'Email Subject', 'Sender', 'Filename', 'File Type', 'Size', 'Drive Link'];
-  sheet.appendRow(headers);
-
-  // Style header row
-  var headerRange = sheet.getRange(1, 1, 1, headers.length);
-  headerRange
-    .setFontWeight('bold')
-    .setBackground('#1A1A1A')
-    .setFontColor('#C9A84C')
-    .setFontFamily('Roboto Mono')
-    .setFontSize(10)
-    .setHorizontalAlignment('left')
-    .setVerticalAlignment('middle');
-
-  // Freeze header row
-  sheet.setFrozenRows(1);
-
-  // Set column widths
-  sheet.setColumnWidth(1, 170);  // Timestamp
-  sheet.setColumnWidth(2, 280);  // Subject
-  sheet.setColumnWidth(3, 220);  // Sender
-  sheet.setColumnWidth(4, 240);  // Filename
-  sheet.setColumnWidth(5, 140);  // File Type
-  sheet.setColumnWidth(6, 90);   // Size
-  sheet.setColumnWidth(7, 130);  // Drive Link
-
-  // Add footer row with branding
-  var footerRow = 3;
-  sheet.getRange(footerRow, 1).setValue('Powered by TAKScripts \u00B7 takscripts.store');
-  var footerRange = sheet.getRange(footerRow, 1, 1, headers.length);
-  footerRange
-    .setFontFamily('Roboto')
-    .setFontSize(9)
-    .setFontColor('#999999')
-    .setFontStyle('italic')
-    .setBackground('#FFFFFF');
-  sheet.getRange(footerRow, 1, 1, 1).setFontColor('#C9A84C');
-
-  return sheet;
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
 }
 
 // ═══════════════════════════════════════════
 // SCHEDULING
 // ═══════════════════════════════════════════
 
-/**
- * Updates the time-driven trigger based on the schedule setting.
- * Removes existing triggers before creating a new one.
- */
 function updateScheduleTrigger_(schedule) {
-  // Remove existing auto-save triggers
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'autoSaveAttachments') {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
-
-  if (!schedule || schedule === 'off') {
-    Logger.log('Auto-schedule disabled.');
-    return;
-  }
+  if (!schedule || schedule === 'off') return;
 
   var builder = ScriptApp.newTrigger('autoSaveAttachments').timeBased();
-
   switch (schedule) {
-    case 'hourly':
-      builder.everyHours(1);
-      break;
-    case 'every6hours':
-      builder.everyHours(6);
-      break;
-    case 'daily':
-      builder.everyDays(1).atHour(6);
-      break;
-    default:
-      Logger.log('Unknown schedule: ' + schedule);
-      return;
+    case 'hourly': builder.everyHours(1); break;
+    case 'every6hours': builder.everyHours(6); break;
+    case 'daily': builder.everyDays(1).atHour(6); break;
+    default: return;
   }
-
   builder.create();
-  Logger.log('Auto-schedule set to: ' + schedule);
 }
 
 // ═══════════════════════════════════════════
@@ -825,12 +1064,20 @@ function updateScheduleTrigger_(schedule) {
 // ═══════════════════════════════════════════
 
 /**
- * Clears all processed message IDs. Use if you want to re-process
- * previously saved emails.
+ * Clears processed message history so all emails get re-processed.
  */
 function resetProcessedIds() {
   PropertiesService.getScriptProperties().deleteProperty(PROP_PROCESSED);
   SpreadsheetApp.getUi().alert('Processed message history cleared. The next run will process all matching emails again.');
+}
+
+/**
+ * Initial setup — creates the dashboard sheet.
+ */
+function initialSetup() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  getOrCreateDashboard_(ss);
+  SpreadsheetApp.getUi().alert('✅ Dashboard created! Use the 🕷 TAKScripts menu to configure settings and start saving attachments.');
 }
 
 // ═══════════════════════════════════════════
@@ -933,14 +1180,6 @@ function getSettingsHtml() {
 '      color: #333;\n' +
 '    }\n' +
 '\n' +
-'    .folder-picker {\n' +
-'      display: flex;\n' +
-'      gap: 8px;\n' +
-'      align-items: center;\n' +
-'    }\n' +
-'    .folder-picker input {\n' +
-'      flex: 1;\n' +
-'    }\n' +
 '    .folder-name {\n' +
 '      font-size: 12px;\n' +
 '      color: #333;\n' +
@@ -976,12 +1215,6 @@ function getSettingsHtml() {
 '      margin-top: 8px;\n' +
 '    }\n' +
 '    .btn-secondary:hover { border-color: #999; color: #333; }\n' +
-'    .btn-small {\n' +
-'      width: auto;\n' +
-'      padding: 8px 14px;\n' +
-'      font-size: 11px;\n' +
-'      border-radius: 6px;\n' +
-'    }\n' +
 '\n' +
 '    .status {\n' +
 '      text-align: center;\n' +
@@ -993,7 +1226,6 @@ function getSettingsHtml() {
 '    }\n' +
 '    .status.success { display: block; background: #E8F5E9; color: #2E7D32; }\n' +
 '    .status.error { display: block; background: #FFEBEE; color: #C62828; }\n' +
-'    .status.warning { display: block; background: #FFF8E1; color: #F57F17; }\n' +
 '\n' +
 '    .divider { border-top: 1px solid #eee; margin: 20px 0; }\n' +
 '\n' +
@@ -1009,14 +1241,13 @@ function getSettingsHtml() {
 '</head>\n' +
 '<body>\n' +
 '  <div class="header">\n' +
-'    <div class="logo">\uD83D\uDD77</div>\n' +
+'    <div class="logo">🕷</div>\n' +
 '    <h1><span class="brand">TAK</span>Scripts</h1>\n' +
-'    <div class="sub">Attachment Auto-Saver \u00B7 Settings</div>\n' +
+'    <div class="sub">Attachment Auto-Saver · Settings</div>\n' +
 '  </div>\n' +
 '\n' +
 '  <div class="form">\n' +
 '\n' +
-'    <!-- SOURCE -->\n' +
 '    <div class="section-title">Source</div>\n' +
 '\n' +
 '    <div class="field">\n' +
@@ -1031,14 +1262,13 @@ function getSettingsHtml() {
 '      <div class="help">Gmail search syntax. "has:attachment" is always included.</div>\n' +
 '    </div>\n' +
 '\n' +
-'    <!-- DESTINATION -->\n' +
 '    <div class="section-title">Destination</div>\n' +
 '\n' +
 '    <div class="field">\n' +
 '      <label>Drive Folder ID (optional)</label>\n' +
 '      <input type="text" id="destinationFolderId" placeholder="Paste folder ID from the URL" />\n' +
 '      <div id="folderName" class="folder-name"></div>\n' +
-'      <div class="help">Leave blank to save to your Drive root. Find the ID in the folder\'s URL after /folders/.</div>\n' +
+'      <div class="help">Leave blank to save to Drive root.</div>\n' +
 '    </div>\n' +
 '\n' +
 '    <div class="field">\n' +
@@ -1051,7 +1281,6 @@ function getSettingsHtml() {
 '      </select>\n' +
 '    </div>\n' +
 '\n' +
-'    <!-- FILTERS -->\n' +
 '    <div class="section-title">Filters</div>\n' +
 '\n' +
 '    <div class="checkbox-group">\n' +
@@ -1059,10 +1288,10 @@ function getSettingsHtml() {
 '      <div class="help" style="margin-bottom: 8px;">Leave all unchecked to save all file types.</div>\n' +
 '      <div class="checkbox-row"><input type="checkbox" value="pdf" class="ft-check" /><span>PDFs</span></div>\n' +
 '      <div class="checkbox-row"><input type="checkbox" value="images" class="ft-check" /><span>Images</span></div>\n' +
-'      <div class="checkbox-row"><input type="checkbox" value="documents" class="ft-check" /><span>Documents (Word, etc.)</span></div>\n' +
+'      <div class="checkbox-row"><input type="checkbox" value="documents" class="ft-check" /><span>Documents</span></div>\n' +
 '      <div class="checkbox-row"><input type="checkbox" value="spreadsheets" class="ft-check" /><span>Spreadsheets</span></div>\n' +
 '      <div class="checkbox-row"><input type="checkbox" value="presentations" class="ft-check" /><span>Presentations</span></div>\n' +
-'      <div class="checkbox-row"><input type="checkbox" value="archives" class="ft-check" /><span>Archives (ZIP, etc.)</span></div>\n' +
+'      <div class="checkbox-row"><input type="checkbox" value="archives" class="ft-check" /><span>Archives</span></div>\n' +
 '      <div class="checkbox-row"><input type="checkbox" value="audio" class="ft-check" /><span>Audio</span></div>\n' +
 '      <div class="checkbox-row"><input type="checkbox" value="video" class="ft-check" /><span>Video</span></div>\n' +
 '    </div>\n' +
@@ -1070,7 +1299,7 @@ function getSettingsHtml() {
 '    <div class="field">\n' +
 '      <label>Max File Size (MB)</label>\n' +
 '      <input type="number" id="maxFileSizeMB" min="0" max="50" value="25" />\n' +
-'      <div class="help">Set to 0 for no limit. Gmail max is 25 MB.</div>\n' +
+'      <div class="help">Set to 0 for no limit.</div>\n' +
 '    </div>\n' +
 '\n' +
 '    <div class="checkbox-group">\n' +
@@ -1080,7 +1309,6 @@ function getSettingsHtml() {
 '      </div>\n' +
 '    </div>\n' +
 '\n' +
-'    <!-- SCHEDULE -->\n' +
 '    <div class="section-title">Schedule</div>\n' +
 '\n' +
 '    <div class="field">\n' +
@@ -1091,7 +1319,6 @@ function getSettingsHtml() {
 '        <option value="every6hours">Every 6 Hours</option>\n' +
 '        <option value="daily">Daily (6 AM)</option>\n' +
 '      </select>\n' +
-'      <div class="help">Automatically save new attachments on a schedule.</div>\n' +
 '    </div>\n' +
 '\n' +
 '    <div class="divider"></div>\n' +
@@ -1102,10 +1329,9 @@ function getSettingsHtml() {
 '    <div id="status" class="status"></div>\n' +
 '  </div>\n' +
 '\n' +
-'  <div class="footer">Powered by <a href="https://takscripts.store" target="_blank">TAKScripts</a> \u00B7 takscripts.store</div>\n' +
+'  <div class="footer">Powered by <a href="https://takscripts.store" target="_blank">TAKScripts</a> · takscripts.store</div>\n' +
 '\n' +
 '  <script>\n' +
-'    // Load saved settings on open\n' +
 '    google.script.run.withSuccessHandler(function(settings) {\n' +
 '      document.getElementById("sourceLabel").value = settings.sourceLabel || "";\n' +
 '      document.getElementById("searchQuery").value = settings.searchQuery || "";\n' +
@@ -1114,15 +1340,11 @@ function getSettingsHtml() {
 '      document.getElementById("maxFileSizeMB").value = settings.maxFileSizeMB || 25;\n' +
 '      document.getElementById("skipInlineImages").checked = settings.skipInlineImages !== false;\n' +
 '      document.getElementById("autoSchedule").value = settings.autoSchedule || "off";\n' +
-'\n' +
-'      // Show folder name if ID is set\n' +
 '      if (settings.destinationFolderName) {\n' +
 '        var el = document.getElementById("folderName");\n' +
-'        el.textContent = "\\uD83D\\uDCC1 " + settings.destinationFolderName;\n' +
+'        el.textContent = "📁 " + settings.destinationFolderName;\n' +
 '        el.classList.add("visible");\n' +
 '      }\n' +
-'\n' +
-'      // Restore file type checkboxes\n' +
 '      var filters = settings.fileTypeFilters || [];\n' +
 '      var checks = document.querySelectorAll(".ft-check");\n' +
 '      for (var i = 0; i < checks.length; i++) {\n' +
@@ -1131,13 +1353,11 @@ function getSettingsHtml() {
 '    }).loadSettings();\n' +
 '\n' +
 '    function save() {\n' +
-'      // Collect file type filters\n' +
 '      var filters = [];\n' +
 '      var checks = document.querySelectorAll(".ft-check");\n' +
 '      for (var i = 0; i < checks.length; i++) {\n' +
 '        if (checks[i].checked) filters.push(checks[i].value);\n' +
 '      }\n' +
-'\n' +
 '      var settings = {\n' +
 '        sourceLabel: document.getElementById("sourceLabel").value.trim(),\n' +
 '        searchQuery: document.getElementById("searchQuery").value.trim(),\n' +
@@ -1149,23 +1369,20 @@ function getSettingsHtml() {
 '        skipInlineImages: document.getElementById("skipInlineImages").checked,\n' +
 '        autoSchedule: document.getElementById("autoSchedule").value,\n' +
 '      };\n' +
-'\n' +
 '      var statusEl = document.getElementById("status");\n' +
 '      statusEl.className = "status";\n' +
 '      statusEl.style.display = "none";\n' +
-'\n' +
-'      // Validate folder ID if provided\n' +
 '      if (settings.destinationFolderId) {\n' +
 '        google.script.run\n' +
 '          .withSuccessHandler(function(folder) {\n' +
 '            settings.destinationFolderName = folder.name;\n' +
 '            var el = document.getElementById("folderName");\n' +
-'            el.textContent = "\\uD83D\\uDCC1 " + folder.name;\n' +
+'            el.textContent = "📁 " + folder.name;\n' +
 '            el.classList.add("visible");\n' +
 '            doSave(settings);\n' +
 '          })\n' +
 '          .withFailureHandler(function(err) {\n' +
-'            statusEl.textContent = "\\u2715 " + err.message;\n' +
+'            statusEl.textContent = "✕ " + err.message;\n' +
 '            statusEl.className = "status error";\n' +
 '          })\n' +
 '          .pickDestinationFolder(settings.destinationFolderId);\n' +
@@ -1173,16 +1390,15 @@ function getSettingsHtml() {
 '        doSave(settings);\n' +
 '      }\n' +
 '    }\n' +
-'\n' +
 '    function doSave(settings) {\n' +
 '      var statusEl = document.getElementById("status");\n' +
 '      google.script.run\n' +
 '        .withSuccessHandler(function() {\n' +
-'          statusEl.textContent = "\\u2713 Settings saved successfully";\n' +
+'          statusEl.textContent = "✓ Settings saved successfully";\n' +
 '          statusEl.className = "status success";\n' +
 '        })\n' +
 '        .withFailureHandler(function(err) {\n' +
-'          statusEl.textContent = "\\u2715 Error: " + err.message;\n' +
+'          statusEl.textContent = "✕ Error: " + err.message;\n' +
 '          statusEl.className = "status error";\n' +
 '        })\n' +
 '        .saveSettings(settings);\n' +
