@@ -4,13 +4,14 @@
  * Automatically replies to incoming emails when you're out of office.
  *
  * Features:
- * - Custom menu in Gmail/Sheets — no need to touch the script editor
+ * - Custom menu in Sheets — no need to touch the script editor
  * - Beautiful settings sidebar for configuration
+ * - Dashboard stats: Total Replies · Unique Senders · This Trip · Today · Days Left
  * - Set OOO date range with start/end dates
  * - Custom reply message with dynamic {{name}}, {{start}}, {{end}} variables
  * - Only replies once per sender (prevents spam loops)
  * - Skips newsletters, promotions, and automated emails
- * - Logs all auto-replies to a Google Sheet
+ * - All replies logged to a branded dashboard sheet
  * - Runs every 5 minutes via automatic trigger
  * - Idempotent — safe to run multiple times
  *
@@ -19,13 +20,28 @@
  */
 
 // ═══════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════
+
+const DASHBOARD_SHEET_NAME = '📊 OOO Dashboard';
+const DASHBOARD_HEADER_ROW = 3;
+
+const BRAND = {
+  darkBg: '#1A1A1A',
+  gold: '#C9A84C',
+  white: '#FFFFFF',
+  lightGray: '#F9F9F9',
+  successBg: '#E8F5E9', successText: '#2E7D32',
+  headerFont: 'Roboto Mono', bodyFont: 'Roboto',
+};
+
+const LOG_HEADERS = ['Timestamp', 'Sender Email', 'Sender Name', 'Original Subject'];
+
+
+// ═══════════════════════════════════════════
 // MENU & UI
 // ═══════════════════════════════════════════
 
-/**
- * Creates the TAKScripts menu when the spreadsheet opens.
- * This runs automatically — no setup needed.
- */
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('🕷 TAKScripts')
@@ -34,15 +50,13 @@ function onOpen() {
     .addItem('⏹ Stop OOO', 'stopOOO')
     .addSeparator()
     .addItem('🧪 Test Run (no replies sent)', 'testRun')
-    .addItem('📊 View Reply Log', 'viewLog')
+    .addItem('📊 View Dashboard', 'viewDashboard')
+    .addItem('🔄 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
     .addItem('ℹ️ About TAKScripts', 'showAbout')
     .addToUi();
 }
 
-/**
- * Shows the settings sidebar with branded UI.
- */
 function showSettings() {
   const html = HtmlService.createHtmlOutput(getSettingsHtml())
     .setTitle('OOO Auto-Reply Settings')
@@ -50,9 +64,12 @@ function showSettings() {
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
-/**
- * Shows the about dialog.
- */
+function viewDashboard() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME) || getOrCreateDashboard_();
+  ss.setActiveSheet(sheet);
+}
+
 function showAbout() {
   const html = HtmlService.createHtmlOutput(`
     <div style="font-family: 'Segoe UI', system-ui, sans-serif; padding: 20px; text-align: center;">
@@ -75,35 +92,17 @@ function showAbout() {
   SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
 }
 
-/**
- * Navigates to or creates the reply log sheet.
- */
-function viewLog() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName('OOO Reply Log');
-  if (!sheet) {
-    SpreadsheetApp.getUi().alert('No reply log yet. Start your OOO and replies will be logged here.');
-    return;
-  }
-  ss.setActiveSheet(sheet);
-}
 
 // ═══════════════════════════════════════════
 // SETTINGS MANAGEMENT
 // ═══════════════════════════════════════════
 
-/**
- * Save settings from the sidebar.
- */
 function saveSettings(settings) {
   const props = PropertiesService.getScriptProperties();
   props.setProperty('ooo_settings', JSON.stringify(settings));
   return { success: true };
 }
 
-/**
- * Load saved settings.
- */
 function loadSettings() {
   const props = PropertiesService.getScriptProperties();
   const raw = props.getProperty('ooo_settings');
@@ -119,13 +118,141 @@ function loadSettings() {
   return JSON.parse(raw);
 }
 
+
+// ═══════════════════════════════════════════
+// DASHBOARD MANAGEMENT
+// ═══════════════════════════════════════════
+
+/**
+ * Gets or creates the OOO Dashboard sheet with stats bar and log headers.
+ * Idempotent — safe to call multiple times.
+ */
+function getOrCreateDashboard_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+
+  if (!sheet) {
+    // Migration: rename old log sheet if it exists
+    const oldSheet = ss.getSheetByName('OOO Reply Log');
+    if (oldSheet) {
+      oldSheet.setName(DASHBOARD_SHEET_NAME);
+      oldSheet.clear();
+      sheet = oldSheet;
+    } else {
+      sheet = ss.insertSheet(DASHBOARD_SHEET_NAME);
+    }
+  } else {
+    const headerCheck = sheet.getRange(DASHBOARD_HEADER_ROW, 1).getValue();
+    if (headerCheck === LOG_HEADERS[0]) {
+      return sheet; // Already set up
+    }
+  }
+
+  const numCols = LOG_HEADERS.length;
+
+  // ── Row 1: Stat values ──────────────────────────────────
+  sheet.getRange(1, 1, 1, numCols)
+    .setValues([['—', '—', '—', '—']])
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(20)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 52);
+
+  // ── Row 2: Stat labels ──────────────────────────────────
+  sheet.getRange(2, 1, 1, numCols)
+    .setValues([['TOTAL REPLIES', 'UNIQUE SENDERS', 'THIS TRIP', 'TODAY']])
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(8)
+    .setFontWeight('normal')
+    .setFontColor('#888888')
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(2, 20);
+
+  // ── Row 3: Column headers ───────────────────────────────
+  sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, numCols)
+    .setValues([LOG_HEADERS])
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(9)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(DASHBOARD_HEADER_ROW, 32);
+
+  sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
+
+  // ── Column widths ───────────────────────────────────────
+  sheet.setColumnWidth(1, 180); // Timestamp
+  sheet.setColumnWidth(2, 250); // Sender Email
+  sheet.setColumnWidth(3, 150); // Sender Name
+  sheet.setColumnWidth(4, 300); // Original Subject
+
+  return sheet;
+}
+
+/**
+ * Recalculates all stats from log data and settings, updates the stats bar.
+ */
+function refreshDashboardStats() {
+  const sheet = getOrCreateDashboard_();
+  const dataStartRow = DASHBOARD_HEADER_ROW + 1;
+  const lastRow = sheet.getLastRow();
+
+  let totalReplies = 0;
+  const senders = new Set();
+  let thisTrip = 0;
+  let today = 0;
+
+  const settings = loadSettings();
+  const tripStart = settings.startDate ? new Date(settings.startDate + 'T00:00:00') : null;
+  const tripEnd = settings.endDate ? new Date(settings.endDate + 'T23:59:59') : null;
+  const now = new Date();
+
+  if (lastRow >= dataStartRow) {
+    const numRows = lastRow - dataStartRow + 1;
+    const data = sheet.getRange(dataStartRow, 1, numRows, LOG_HEADERS.length).getValues();
+
+    for (const row of data) {
+      if (!row[0]) continue; // Skip empty rows
+      totalReplies++;
+      const email = (row[1] || '').toString().toLowerCase();
+      if (email) senders.add(email);
+
+      const ts = row[0];
+      if (ts instanceof Date) {
+        // This trip
+        if (tripStart && tripEnd && ts >= tripStart && ts <= tripEnd) thisTrip++;
+
+        // Today
+        if (ts.getDate() === now.getDate() &&
+            ts.getMonth() === now.getMonth() &&
+            ts.getFullYear() === now.getFullYear()) {
+          today++;
+        }
+      }
+    }
+  }
+
+  sheet.getRange(1, 1, 1, 4).setValues([[
+    totalReplies || '—',
+    senders.size || '—',
+    thisTrip || '—',
+    today || '—',
+  ]]);
+}
+
+
 // ═══════════════════════════════════════════
 // CORE ENGINE
 // ═══════════════════════════════════════════
 
-/**
- * Main function — checks for new emails and sends OOO replies.
- */
 function checkAndReply() {
   const settings = loadSettings();
   if (!settings.startDate || !settings.endDate) {
@@ -171,9 +298,7 @@ function checkAndReply() {
       .replace(/\{\{start\}\}/g, formatDate(start))
       .replace(/\{\{end\}\}/g, formatDate(end));
 
-    lastMessage.reply(replyBody, {
-      subject: settings.subject,
-    });
+    lastMessage.reply(replyBody, { subject: settings.subject });
 
     replied.add(senderEmail);
     replyCount++;
@@ -184,6 +309,42 @@ function checkAndReply() {
   props.setProperty('ooo_replied', JSON.stringify([...replied]));
   Logger.log('Done. Sent ' + replyCount + ' auto-replies.');
 }
+
+
+// ═══════════════════════════════════════════
+// LOGGING
+// ═══════════════════════════════════════════
+
+/**
+ * Logs a reply to the OOO Dashboard and refreshes stats.
+ */
+function logReply(email, name, subject) {
+  const sheet = getOrCreateDashboard_();
+  const dataStartRow = DASHBOARD_HEADER_ROW + 1;
+  const newRow = Math.max(sheet.getLastRow() + 1, dataStartRow);
+
+  sheet.getRange(newRow, 1, 1, LOG_HEADERS.length).setValues([
+    [new Date(), email, name || '', subject || ''],
+  ]);
+
+  // Row styling
+  const isEven = (newRow - DASHBOARD_HEADER_ROW) % 2 === 0;
+  sheet.getRange(newRow, 1, 1, LOG_HEADERS.length)
+    .setFontFamily(BRAND.bodyFont)
+    .setFontSize(10)
+    .setBackground(isEven ? BRAND.lightGray : BRAND.white);
+  sheet.setRowHeight(newRow, 30);
+
+  sheet.getRange(newRow, 1).setNumberFormat('MMM d, yyyy h:mm a');
+
+  // Highlight the action indicator on sender email
+  sheet.getRange(newRow, 2)
+    .setBackground(BRAND.successBg)
+    .setFontColor(BRAND.successText);
+
+  refreshDashboardStats();
+}
+
 
 // ═══════════════════════════════════════════
 // HELPERS
@@ -222,42 +383,11 @@ function formatDate(date) {
   return months[date.getMonth()] + ' ' + date.getDate() + ', ' + date.getFullYear();
 }
 
-/**
- * Logs reply to the "OOO Reply Log" sheet. Creates it if it doesn't exist.
- * Idempotent — safe to call multiple times.
- */
-function logReply(email, name, subject) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName('OOO Reply Log');
-
-  if (!sheet) {
-    sheet = ss.insertSheet('OOO Reply Log');
-    const headers = ['Timestamp', 'Sender Email', 'Sender Name', 'Original Subject'];
-    sheet.appendRow(headers);
-
-    // Style the header row
-    const headerRange = sheet.getRange(1, 1, 1, headers.length);
-    headerRange.setFontWeight('bold')
-      .setBackground('#1a1a1a')
-      .setFontColor('#C9A84C')
-      .setFontFamily('Roboto Mono');
-    sheet.setFrozenRows(1);
-    sheet.setColumnWidth(1, 180);
-    sheet.setColumnWidth(2, 250);
-    sheet.setColumnWidth(3, 150);
-    sheet.setColumnWidth(4, 300);
-  }
-
-  sheet.appendRow([new Date(), email, name, subject]);
-}
 
 // ═══════════════════════════════════════════
 // CONTROLS
 // ═══════════════════════════════════════════
 
-/**
- * Activates the OOO auto-reply. Creates a 5-minute trigger.
- */
 function startOOO() {
   const settings = loadSettings();
   if (!settings.startDate || !settings.endDate) {
@@ -268,6 +398,7 @@ function startOOO() {
   }
 
   stopOOO();
+  getOrCreateDashboard_();
 
   ScriptApp.newTrigger('checkAndReply')
     .timeBased()
@@ -284,9 +415,6 @@ function startOOO() {
   );
 }
 
-/**
- * Deactivates the OOO auto-reply.
- */
 function stopOOO() {
   const triggers = ScriptApp.getProjectTriggers();
   for (const trigger of triggers) {
@@ -297,9 +425,6 @@ function stopOOO() {
   PropertiesService.getScriptProperties().deleteProperty('ooo_replied');
 }
 
-/**
- * Dry run — shows what would happen without sending any replies.
- */
 function testRun() {
   const threads = GmailApp.search('is:unread is:inbox newer_than:1d');
   const results = [];
@@ -336,6 +461,7 @@ function testRun() {
   SpreadsheetApp.getUi().alert(output);
 }
 
+
 // ═══════════════════════════════════════════
 // SETTINGS SIDEBAR HTML
 // ═══════════════════════════════════════════
@@ -346,104 +472,36 @@ function getSettingsHtml() {
 <head>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: #fafafa;
-      color: #1a1a1a;
-      font-size: 13px;
-    }
-    .header {
-      background: #1a1a1a;
-      color: white;
-      padding: 20px 16px;
-      text-align: center;
-    }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #fafafa; color: #1a1a1a; font-size: 13px; }
+    .header { background: #1a1a1a; color: white; padding: 20px 16px; text-align: center; }
     .header .logo { font-size: 24px; margin-bottom: 4px; }
     .header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; }
     .header .brand { color: #C9A84C; }
     .header .sub { font-size: 11px; color: #888; margin-top: 4px; }
     .form { padding: 16px; }
     .field { margin-bottom: 16px; }
-    .field label {
-      display: block;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #666;
-      margin-bottom: 6px;
-    }
+    .field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-bottom: 6px; }
     .field input, .field textarea {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      font-size: 13px;
-      font-family: inherit;
-      transition: border-color 0.2s;
+      width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px;
+      font-size: 13px; font-family: inherit; transition: border-color 0.2s;
     }
     .field input:focus, .field textarea:focus {
-      outline: none;
-      border-color: #C9A84C;
-      box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
+      outline: none; border-color: #C9A84C; box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
     }
     .field textarea { min-height: 120px; resize: vertical; line-height: 1.5; }
-    .field .help {
-      font-size: 11px;
-      color: #999;
-      margin-top: 4px;
-      line-height: 1.4;
-    }
+    .field .help { font-size: 11px; color: #999; margin-top: 4px; line-height: 1.4; }
     .dates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .btn {
-      width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      letter-spacing: 0.5px;
-    }
-    .btn-primary {
-      background: #1a1a1a;
-      color: #C9A84C;
-      border: 1px solid #C9A84C;
-    }
+    .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px; }
+    .btn-primary { background: #1a1a1a; color: #C9A84C; border: 1px solid #C9A84C; }
     .btn-primary:hover { background: #C9A84C; color: #1a1a1a; }
-    .btn-secondary {
-      background: white;
-      color: #666;
-      border: 1px solid #ddd;
-      margin-top: 8px;
-    }
+    .btn-secondary { background: white; color: #666; border: 1px solid #ddd; margin-top: 8px; }
     .btn-secondary:hover { border-color: #999; color: #333; }
-    .status {
-      text-align: center;
-      padding: 8px;
-      font-size: 12px;
-      margin-top: 8px;
-      border-radius: 6px;
-      display: none;
-    }
+    .status { text-align: center; padding: 8px; font-size: 12px; margin-top: 8px; border-radius: 6px; display: none; }
     .status.success { display: block; background: #e8f5e9; color: #2e7d32; }
     .status.error { display: block; background: #ffebee; color: #c62828; }
     .divider { border-top: 1px solid #eee; margin: 20px 0; }
-    .variables {
-      background: #f5f5f5;
-      border-radius: 6px;
-      padding: 10px 12px;
-      margin-top: 8px;
-    }
-    .variables code {
-      display: inline-block;
-      background: #e8e8e8;
-      padding: 1px 6px;
-      border-radius: 3px;
-      font-size: 11px;
-      margin: 2px;
-    }
+    .variables { background: #f5f5f5; border-radius: 6px; padding: 10px 12px; margin-top: 8px; }
+    .variables code { display: inline-block; background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 11px; margin: 2px; }
   </style>
 </head>
 <body>
@@ -499,7 +557,6 @@ function getSettingsHtml() {
   </div>
 
   <script>
-    // Load saved settings on open
     google.script.run.withSuccessHandler(function(settings) {
       document.getElementById('startDate').value = settings.startDate || '';
       document.getElementById('endDate').value = settings.endDate || '';
