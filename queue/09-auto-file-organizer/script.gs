@@ -16,7 +16,7 @@
  * - Idempotent — safe to run multiple times
  * - Never moves files out of the source folder tree
  *
- * Version: 1.0
+ * Version: 2.0
  * By TAK Ventures — takscripts.store
  */
 
@@ -116,6 +116,9 @@ var FILE_CATEGORIES = {
   },
 };
 
+var DASHBOARD_SHEET_NAME = '\uD83D\uDCCA Organizer Dashboard';
+var DASHBOARD_HEADER_ROW = 3;
+
 /**
  * Default settings for new installs.
  */
@@ -143,7 +146,8 @@ function onOpen() {
     .addItem('\u25B6\uFE0F Organize Now', 'organizeNow')
     .addItem('\uD83E\uDDEA Test Run (Preview)', 'testRun')
     .addSeparator()
-    .addItem('\uD83D\uDCCA View Activity Log', 'viewActivityLog')
+    .addItem('\uD83D\uDCCA View Dashboard', 'viewActivityLog')
+    .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
     .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
     .addToUi();
@@ -189,7 +193,7 @@ function showAbout() {
  */
 function viewActivityLog() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('\uD83D\uDCCB Activity Log');
+  var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (!sheet) {
     SpreadsheetApp.getUi().alert(
       'No activity log yet.\n\nRun "Organize Now" or "Test Run" to generate log entries.'
@@ -629,71 +633,62 @@ function getUniqueName_(folder, name) {
 // ═══════════════════════════════════════════
 
 /**
- * Writes file move entries to the Activity Log sheet.
- * Creates and styles the sheet if it doesn't exist.
+ * Gets or creates the Organizer Dashboard sheet with branded stats bar.
+ * Migrates from old '📋 Activity Log' sheet name if present.
  *
- * @param {Array<Object>} entries - Array of log entry objects.
- * @param {boolean} dryRun - Whether this was a preview run.
+ * @return {GoogleAppsScript.Spreadsheet.Sheet} The dashboard sheet.
  */
-function writeActivityLog_(entries, dryRun) {
+function getOrCreateDashboard_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheetName = '\uD83D\uDCCB Activity Log';
-  var sheet = ss.getSheetByName(sheetName);
+  var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
 
-  if (!sheet) {
-    sheet = createActivityLogSheet_(ss, sheetName);
-  }
-
-  // Write each entry as a row
-  for (var i = 0; i < entries.length; i++) {
-    var e = entries[i];
-    var row = [e.timestamp, e.fileName, e.fileType, e.from, e.to, e.status];
-    sheet.appendRow(row);
-
-    // Style the status cell
-    var lastRow = sheet.getLastRow();
-    var statusCell = sheet.getRange(lastRow, 6);
-    styleStatusCell_(statusCell, e.status);
-
-    // Alternate row background
-    var rowRange = sheet.getRange(lastRow, 1, 1, 6);
-    if (lastRow % 2 === 0) {
-      rowRange.setBackground('#F9F9F9');
-    } else {
-      rowRange.setBackground('#FFFFFF');
+  // Migration: rename old Activity Log sheet
+  var oldSheet = ss.getSheetByName('\uD83D\uDCCB Activity Log');
+  if (oldSheet && !sheet) {
+    oldSheet.setName(DASHBOARD_SHEET_NAME);
+    sheet = oldSheet;
+    // Shift old data down by 2 rows to make room for stats bar
+    var oldLastRow = sheet.getLastRow();
+    if (oldLastRow >= 1) {
+      sheet.insertRowsBefore(1, 2);
     }
-    rowRange.setFontFamily('Roboto')
-      .setFontSize(10);
+    // Re-apply header styling on the new row 3
+    var headerRange = sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, 6);
+    headerRange
+      .setBackground('#1A1A1A')
+      .setFontColor('#C9A84C')
+      .setFontFamily('Roboto Mono')
+      .setFontWeight('bold')
+      .setFontSize(9)
+      .setHorizontalAlignment('left');
+    sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
+    buildStatsBar_(sheet);
+    refreshDashboardStats();
+    return sheet;
   }
 
-  // Add footer after entries
-  addSheetFooter_(sheet, 6);
-}
+  if (sheet) {
+    return sheet;
+  }
 
-/**
- * Creates and styles the Activity Log sheet with branded headers.
- *
- * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} ss - The spreadsheet.
- * @param {string} sheetName - Name for the new sheet.
- * @return {GoogleAppsScript.Spreadsheet.Sheet} The created sheet.
- */
-function createActivityLogSheet_(ss, sheetName) {
-  var sheet = ss.insertSheet(sheetName);
+  // Create fresh sheet
+  sheet = ss.insertSheet(DASHBOARD_SHEET_NAME);
+
+  buildStatsBar_(sheet);
+
+  // Header row
   var headers = ['Timestamp', 'File Name', 'File Type', 'From', 'To', 'Status'];
-  sheet.appendRow(headers);
-
-  // Style the header row
-  var headerRange = sheet.getRange(1, 1, 1, headers.length);
-  headerRange
+  var headerRange = sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, headers.length);
+  headerRange.setValues([headers])
     .setBackground('#1A1A1A')
     .setFontColor('#C9A84C')
     .setFontFamily('Roboto Mono')
     .setFontWeight('bold')
-    .setFontSize(10)
+    .setFontSize(9)
     .setHorizontalAlignment('left');
-  sheet.setFrozenRows(1);
+  sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
 
-  // Set column widths
+  // Column widths
   sheet.setColumnWidth(1, 170);  // Timestamp
   sheet.setColumnWidth(2, 280);  // File Name
   sheet.setColumnWidth(3, 220);  // File Type
@@ -702,6 +697,133 @@ function createActivityLogSheet_(ss, sheetName) {
   sheet.setColumnWidth(6, 150);  // Status
 
   return sheet;
+}
+
+/**
+ * Writes the stats bar rows 1-2 (values + labels) with brand styling.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ */
+function buildStatsBar_(sheet) {
+  // Row 1: stat values (gold, large)
+  var valRange = sheet.getRange(1, 1, 1, 5);
+  valRange
+    .setValues([['—', '—', '—', '—', '—']])
+    .setBackground('#1A1A1A')
+    .setFontColor('#C9A84C')
+    .setFontFamily('Roboto Mono')
+    .setFontSize(20)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 48);
+
+  // Blank col 6 in stats rows
+  sheet.getRange(1, 6).setBackground('#1A1A1A').setValue('');
+  sheet.getRange(2, 6).setBackground('#1A1A1A').setValue('');
+
+  // Row 2: stat labels
+  var lblRange = sheet.getRange(2, 1, 1, 5);
+  lblRange
+    .setValues([['TOTAL MOVED', 'PREVIEWED', 'ERRORS', 'TODAY', 'LAST RUN']])
+    .setBackground('#1A1A1A')
+    .setFontColor('#888888')
+    .setFontFamily('Roboto Mono')
+    .setFontSize(8)
+    .setFontWeight('normal')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('top');
+  sheet.setRowHeight(2, 20);
+}
+
+/**
+ * Reads live data and writes fresh stat values to row 1.
+ * Safe to call any time.
+ */
+function refreshDashboardStats() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (!sheet) return;
+
+  var dataStartRow = DASHBOARD_HEADER_ROW + 1;
+  var lastRow = sheet.getLastRow();
+
+  var totalMoved = 0;
+  var previewed = 0;
+  var errors = 0;
+  var today = 0;
+  var lastRunTs = null;
+
+  if (lastRow >= dataStartRow) {
+    var data = sheet.getRange(dataStartRow, 1, lastRow - dataStartRow + 1, 6).getValues();
+    var now = new Date();
+
+    for (var i = 0; i < data.length; i++) {
+      var ts = data[i][0];
+      var status = data[i][5];
+      if (!status) continue;
+
+      if (status === 'Moved') totalMoved++;
+      else if (status === 'Preview') previewed++;
+      else if (String(status).indexOf('Error') === 0) errors++;
+
+      if (ts instanceof Date) {
+        if (ts.getDate() === now.getDate() &&
+            ts.getMonth() === now.getMonth() &&
+            ts.getFullYear() === now.getFullYear()) {
+          today++;
+        }
+        if (!lastRunTs || ts > lastRunTs) lastRunTs = ts;
+      }
+    }
+  }
+
+  var lastRunDisplay = lastRunTs
+    ? Utilities.formatDate(lastRunTs, Session.getScriptTimeZone(), 'MMM d')
+    : '\u2014';
+
+  sheet.getRange(1, 1, 1, 5).setValues([[
+    totalMoved || '\u2014',
+    previewed || '\u2014',
+    errors || '\u2014',
+    today || '\u2014',
+    lastRunDisplay,
+  ]]);
+}
+
+/**
+ * Writes file move entries to the Organizer Dashboard sheet.
+ *
+ * @param {Array<Object>} entries - Array of log entry objects.
+ * @param {boolean} dryRun - Whether this was a preview run.
+ */
+function writeActivityLog_(entries, dryRun) {
+  var sheet = getOrCreateDashboard_();
+  var dataStartRow = DASHBOARD_HEADER_ROW + 1;
+
+  // Write each entry as a new row
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    var targetRow = Math.max(sheet.getLastRow() + 1, dataStartRow);
+    var row = [e.timestamp, e.fileName, e.fileType, e.from, e.to, e.status];
+    sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
+
+    // Style the status cell
+    var statusCell = sheet.getRange(targetRow, 6);
+    styleStatusCell_(statusCell, e.status);
+
+    // Alternate row background
+    var rowRange = sheet.getRange(targetRow, 1, 1, 6);
+    if (targetRow % 2 === 0) {
+      rowRange.setBackground('#F9F9F9');
+    } else {
+      rowRange.setBackground('#FFFFFF');
+    }
+    rowRange.setFontFamily('Roboto').setFontSize(10);
+    // Re-apply status cell color (row bg would have overridden it)
+    styleStatusCell_(sheet.getRange(targetRow, 6), e.status);
+  }
+
+  refreshDashboardStats();
 }
 
 /**
@@ -719,45 +841,6 @@ function styleStatusCell_(cell, status) {
     cell.setBackground('#FFEBEE').setFontColor('#C62828');
   }
   cell.setFontWeight('bold');
-}
-
-/**
- * Adds or updates the branded footer row at the bottom of a sheet.
- *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet.
- * @param {number} numCols - Number of columns to merge for the footer.
- */
-function addSheetFooter_(sheet, numCols) {
-  var lastRow = sheet.getLastRow();
-
-  // Check if footer already exists (look at last row)
-  var lastCellValue = sheet.getRange(lastRow, 1).getValue();
-  if (lastCellValue === 'Powered by TAKScripts \u00B7 takscripts.store') {
-    return; // Footer already exists, don't duplicate
-  }
-
-  // Remove any previous footer first
-  for (var r = lastRow; r >= 2; r--) {
-    var val = sheet.getRange(r, 1).getValue();
-    if (val === 'Powered by TAKScripts \u00B7 takscripts.store') {
-      sheet.deleteRow(r);
-      break;
-    }
-  }
-
-  // Add blank separator row
-  sheet.appendRow(['']);
-  // Add footer row
-  sheet.appendRow(['Powered by TAKScripts \u00B7 takscripts.store']);
-  var footerRow = sheet.getLastRow();
-  var footerRange = sheet.getRange(footerRow, 1, 1, numCols);
-  footerRange.merge()
-    .setHorizontalAlignment('center')
-    .setFontFamily('Roboto')
-    .setFontSize(9)
-    .setFontColor('#999999')
-    .setFontStyle('italic')
-    .setBackground('#FAFAFA');
 }
 
 // ═══════════════════════════════════════════
