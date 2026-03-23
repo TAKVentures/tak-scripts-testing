@@ -30,6 +30,54 @@ Read this before testing any script. Use these standards when evaluating the vis
 | Sheet Accent Row | Light Gold BG | #FFF8E7 |
 | Sheet Border | Light Gray | #E0E0E0 |
 
+## Product Tiers
+
+Every script falls into one of three tiers. This determines how the UI is structured.
+
+### Tier 1 — Sheet IS the Product
+The Google Sheet holds real data the customer interacts with daily.
+- **Examples:** Invoice Generator, Inventory Tracker, Follow-Up Nudger, Email Invoice Detector, VIP Priority Alert
+- **Required:** Full dashboard with stats row (large gold numbers on dark bg), data table with color-coded status cells, clickable links, branded footer
+- **Settings:** Sidebar within the Sheet
+- **Menu:** Full menu in Sheet toolbar
+
+### Tier 2 — Sheet as Control Panel
+The real work happens in Drive, Gmail, etc. The Sheet hosts the menu, settings, and an activity log.
+- **Examples:** Auto File Organizer, Attachment Auto-Saver, OOO Auto-Reply, Bulk Email Unsubscriber
+- **Required:** Activity log sheet with branded headers, simple stats row (if meaningful data exists), branded footer
+- **Settings:** Sidebar within the Sheet
+- **Menu:** Full menu in Sheet toolbar
+
+### Tier 3 — No Sheet (Native Tool)
+Script is bound to Docs, Slides, Forms, or runs standalone. No Sheet involvement.
+- **Examples:** Doc Translator, Slide Template Stamper, Form Response Router
+- **Required:** Branded sidebar/dialog within the native tool (Docs/Slides/Forms)
+- **Settings:** Sidebar or dialog within the native tool
+- **Menu:** Custom menu in the native tool's toolbar (e.g., "🕷 TAKScripts" in Docs menu bar)
+- **Note:** If the script needs to log data or show stats, it CAN create a companion Sheet, but it's not required
+
+---
+
+## Zero-Code Customization Rule
+
+**Customers must NEVER need to edit the script code.** All configuration happens through the UI:
+
+- Text inputs for emails, names, messages, thresholds
+- Dropdowns for frequency, mode, format choices
+- Toggle switches for enabling/disabling features
+- Checkboxes for selecting categories or options
+- All settings stored in `PropertiesService` (persists across sessions)
+- Settings sidebar loads saved values on open, saves on button click
+
+The customer flow is always:
+```
+Paste code → Reload → Click 🕷 TAKScripts → ⚙️ Settings → Configure → Done
+```
+
+If a script requires the customer to edit a variable in the code, it is NOT ready to sell.
+
+---
+
 ## Google Sheets Design Standards
 
 Every script that creates or modifies a Google Sheet should follow these rules:
