@@ -19,9 +19,16 @@
  * - Undo via backup sheet
  * - Results dialog with full stats
  *
- * Version: 1.0
+ * Version: 2.0
  * By TAK Ventures — takscripts.store
  */
+
+// ═══════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════
+
+const DASHBOARD_SHEET_NAME = '\uD83D\uDCCA Cleanup Dashboard';
+const DASHBOARD_HEADER_ROW = 3;
 
 // ═══════════════════════════════════════════
 // MENU & UI
@@ -45,6 +52,9 @@ function onOpen() {
     .addItem('📞 Standardize Phone Numbers', 'menuStandardizePhones')
     .addItem('📧 Fix Email Formatting', 'menuFixEmails')
     .addItem('🚫 Remove Special Characters', 'menuRemoveSpecialChars')
+    .addSeparator()
+    .addItem('📊 View Dashboard', 'viewDashboard')
+    .addItem('🔄 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
     .addItem('⚙️ Cleanup Settings', 'showSidebar')
     .addItem('↩️ Undo (Restore Backup)', 'undoFromBackup')
@@ -71,7 +81,7 @@ function showAbout() {
     <div style="font-family: 'Segoe UI', system-ui, sans-serif; padding: 20px; text-align: center;">
       <div style="font-size: 32px; margin-bottom: 8px;">🕷</div>
       <h2 style="margin: 0 0 4px; font-size: 18px;">Data Cleanup Wizard</h2>
-      <p style="color: #666; font-size: 12px; margin: 0 0 16px;">Version 1.0 · by TAK Ventures</p>
+      <p style="color: #666; font-size: 12px; margin: 0 0 16px;">Version 2.0 · by TAK Ventures</p>
       <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;">
       <p style="font-size: 13px; color: #333; line-height: 1.6;">
         Part of the <strong>TAKScripts</strong> collection.<br>
@@ -86,6 +96,21 @@ function showAbout() {
     </div>
   `).setWidth(300).setHeight(280);
   SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
+}
+
+/**
+ * Navigates to the Cleanup Dashboard sheet.
+ */
+function viewDashboard() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert(
+      'No cleanup history yet.\n\nRun a cleanup to generate dashboard entries.'
+    );
+    return;
+  }
+  ss.setActiveSheet(sheet);
 }
 
 // ═══════════════════════════════════════════
@@ -840,6 +865,7 @@ function runFromSidebar(options) {
   if (options.emails) results.emails = fixEmails_(false);
   if (options.specialChars) results.specialChars = removeSpecialChars_(false);
 
+  logCleanupRun_(results, 'Run');
   return results;
 }
 
@@ -925,6 +951,8 @@ function showResultsDialog_(results) {
     '<strong>' + (total > 0 ? total + ' total changes made' : 'No changes needed — data is clean!') + '</strong>' +
     '</div></div>';
 
+  logCleanupRun_(results, 'Run');
+
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput(html).setWidth(360).setHeight(380),
     'Cleanup Results'
@@ -948,6 +976,8 @@ function showPreviewDialog_(results) {
     '<p style="font-size: 12px; color: #999; margin-top: 12px;">No data was modified. Run a cleanup to apply changes.</p>' +
     '</div>';
 
+  logCleanupRun_(results, 'Preview');
+
   SpreadsheetApp.getUi().showModalDialog(
     HtmlService.createHtmlOutput(html).setWidth(320).setHeight(220),
     'Preview Results'
@@ -960,6 +990,187 @@ function statusLine_(count, label) {
   return '<div style="padding: 4px 0; font-size: 13px; color: ' + color + ';">' +
     '<span style="margin-right: 6px;">' + icon + '</span>' +
     '<strong>' + count + '</strong> ' + label + '</div>';
+}
+
+// ═══════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════
+
+/**
+ * Gets or creates the Cleanup Dashboard sheet with branded stats bar.
+ * @return {GoogleAppsScript.Spreadsheet.Sheet}
+ */
+function getOrCreateDashboard_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(DASHBOARD_SHEET_NAME);
+
+  // Row 1: stat values (gold, large)
+  sheet.getRange(1, 1, 1, 5)
+    .setValues([['—', '—', '—', '—', '—']])
+    .setBackground('#1A1A1A')
+    .setFontColor('#C9A84C')
+    .setFontFamily('Roboto Mono')
+    .setFontSize(20)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 48);
+
+  // Row 2: stat labels
+  sheet.getRange(2, 1, 1, 5)
+    .setValues([['TOTAL RUNS', 'CELLS FIXED', 'DUPES REMOVED', 'PREVIEWS', 'LAST RUN']])
+    .setBackground('#1A1A1A')
+    .setFontColor('#888888')
+    .setFontFamily('Roboto Mono')
+    .setFontSize(8)
+    .setFontWeight('normal')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('top');
+  sheet.setRowHeight(2, 20);
+
+  // Row 3: column headers
+  const headers = ['Timestamp', 'Sheet', 'Operation', 'Changes Made', 'Mode'];
+  sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, headers.length)
+    .setValues([headers])
+    .setBackground('#1A1A1A')
+    .setFontColor('#C9A84C')
+    .setFontFamily('Roboto Mono')
+    .setFontWeight('bold')
+    .setFontSize(9)
+    .setHorizontalAlignment('left');
+  sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
+
+  // Column widths
+  sheet.setColumnWidth(1, 160);  // Timestamp
+  sheet.setColumnWidth(2, 180);  // Sheet
+  sheet.setColumnWidth(3, 200);  // Operation
+  sheet.setColumnWidth(4, 130);  // Changes Made
+  sheet.setColumnWidth(5, 100);  // Mode
+
+  return sheet;
+}
+
+/**
+ * Reads log data and updates the stats bar (row 1).
+ */
+function refreshDashboardStats() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (!sheet) return;
+
+  const dataStartRow = DASHBOARD_HEADER_ROW + 1;
+  const lastRow = sheet.getLastRow();
+
+  let totalRuns = 0;
+  let cellsFixed = 0;
+  let dupesRemoved = 0;
+  let previews = 0;
+  let lastRunTs = null;
+
+  if (lastRow >= dataStartRow) {
+    const data = sheet.getRange(dataStartRow, 1, lastRow - dataStartRow + 1, 5).getValues();
+
+    for (const row of data) {
+      const ts = row[0];
+      const operation = String(row[2]);
+      const changes = Number(row[3]) || 0;
+      const mode = String(row[4]);
+
+      if (mode === 'Run') {
+        totalRuns++;
+        cellsFixed += changes;
+        if (operation === 'Remove Duplicates' || operation === 'All Cleanups') {
+          // can't distinguish dupes from total in All Cleanups — only count dedicated runs
+          if (operation === 'Remove Duplicates') dupesRemoved += changes;
+        }
+      } else if (mode === 'Preview') {
+        previews++;
+      }
+
+      if (ts instanceof Date && (!lastRunTs || ts > lastRunTs)) lastRunTs = ts;
+    }
+  }
+
+  const lastRunDisplay = lastRunTs
+    ? Utilities.formatDate(lastRunTs, Session.getScriptTimeZone(), 'MMM d')
+    : '—';
+
+  sheet.getRange(1, 1, 1, 5).setValues([[
+    totalRuns || '—',
+    cellsFixed || '—',
+    dupesRemoved || '—',
+    previews || '—',
+    lastRunDisplay,
+  ]]);
+}
+
+/**
+ * Derives a human-readable operation name from a results object.
+ * @param {Object} results
+ * @return {string}
+ */
+function getOperationName_(results) {
+  const definedKeys = Object.keys(results).filter(k => results[k] !== undefined);
+  if (definedKeys.length >= 4) return 'All Cleanups';
+  const nameMap = {
+    duplicates: 'Remove Duplicates',
+    trimmed: 'Trim Whitespace',
+    capitalization: 'Fix Capitalization',
+    dates: 'Standardize Dates',
+    emptyRows: 'Remove Empties',
+    emptyCols: 'Remove Empties',
+    phones: 'Standardize Phones',
+    emails: 'Fix Emails',
+    specialChars: 'Remove Special Chars',
+  };
+  const first = definedKeys.find(k => nameMap[k]);
+  return first ? nameMap[first] : 'Cleanup';
+}
+
+/**
+ * Logs a cleanup run to the Cleanup Dashboard sheet.
+ * @param {Object} results - The results object from the cleanup.
+ * @param {string} mode - 'Run' or 'Preview'.
+ */
+function logCleanupRun_(results, mode) {
+  try {
+    const sheet = getOrCreateDashboard_();
+    const dataStartRow = DASHBOARD_HEADER_ROW + 1;
+    const activeSheetName = SpreadsheetApp.getActiveSheet().getName();
+    const operation = getOperationName_(results);
+    const total = Object.values(results).reduce((sum, v) => sum + (Number(v) || 0), 0);
+
+    const targetRow = Math.max(sheet.getLastRow() + 1, dataStartRow);
+    sheet.getRange(targetRow, 1, 1, 5).setValues([[
+      new Date(), activeSheetName, operation, total, mode,
+    ]]);
+
+    // Style the mode cell
+    const modeCell = sheet.getRange(targetRow, 5);
+    if (mode === 'Run') {
+      modeCell.setBackground('#E8F5E9').setFontColor('#2E7D32').setFontWeight('bold');
+    } else {
+      modeCell.setBackground('#FFF8E1').setFontColor('#F57F17').setFontWeight('bold');
+    }
+
+    // Style changes cell — gold if > 0
+    const changesCell = sheet.getRange(targetRow, 4);
+    if (total > 0) {
+      changesCell.setFontColor('#C9A84C').setFontWeight('bold');
+    }
+
+    // Alternate row background (preserve status cell colors)
+    const rowRange = sheet.getRange(targetRow, 1, 1, 3);
+    rowRange.setBackground(targetRow % 2 === 0 ? '#F9F9F9' : '#FFFFFF')
+      .setFontFamily('Roboto').setFontSize(10);
+
+    refreshDashboardStats();
+  } catch (e) {
+    Logger.log('Dashboard log error: ' + e.message);
+  }
 }
 
 // ═══════════════════════════════════════════
