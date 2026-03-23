@@ -218,7 +218,29 @@ function loadSettings() {
 
 ---
 
-## 10. ES5 vs ES6
+## 10. Deliverable File Format
+
+**Rule:** Scripts are delivered to customers as `.txt` files, not `.gs` files.
+
+**Why:** `.txt` files are universally openable. Customers copy the contents and paste into their Apps Script editor.
+
+**Upload path in Supabase Storage:**
+```
+deliverables/{slug}/{slug}.txt
+```
+
+**`product_ideas` fields to set on approval:**
+```
+deliverable_url  = 'deliverables/{slug}/{slug}.txt'
+setup_guide_url  = 'deliverables/{slug}/SETUP.md'   (once guide is written)
+stripe_price_id  = (from Stripe dashboard)
+is_active        = true
+status           = 'live'
+```
+
+---
+
+## 11. ES5 vs ES6
 
 **Rule:** Default to ES5 (`var`, `function`, string concatenation) for consistency across the catalog. Only use ES6 if the script was originally written in ES6 — don't mix styles within a file.
 
