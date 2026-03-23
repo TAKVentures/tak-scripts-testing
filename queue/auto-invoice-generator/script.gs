@@ -2,21 +2,26 @@
  * Auto Invoice Generator by TAKScripts
  * ======================================
  * Generate branded PDF invoices, email them to clients, and track everything
- * from a single Google Sheet — no code required.
+ * from a single Google Sheet — no code required. The Invoice Dashboard gives
+ * you a real-time revenue snapshot: Total Revenue, Outstanding, Paid vs Unpaid,
+ * and automatic overdue highlighting.
  *
  * Features:
  * - Custom menu in Google Sheets — no need to touch the script editor
  * - Beautiful settings sidebar for business info, tax, and email config
+ * - Revenue dashboard: Total Revenue, Outstanding, Paid count, Overdue count
  * - Reads client data from a styled "Clients" sheet
  * - Generates branded Google Doc invoices from an auto-created template
  * - Converts to PDF and saves to an organized Drive folder
  * - Sends professional HTML emails with PDF attachment
- * - Logs every invoice with status tracking (Draft / Sent / Paid)
+ * - Logs every invoice with color-coded status (Draft / Sent / Paid / Overdue)
+ * - Overdue row highlighting — past-due invoices turn red automatically
  * - Configurable invoice prefix and auto-incrementing numbers
  * - Test Run mode — generates a sample without emailing
  * - Mark invoices as Paid directly from the log
+ * - Refresh stats to recalculate dashboard totals at any time
  *
- * Version: 1.0
+ * Version: 2.0
  * By TAK Ventures — takscripts.store
  */
 
@@ -25,17 +30,19 @@
 // ═══════════════════════════════════════════
 
 const BRAND = {
-  headerBg: '#1A1A1A',
+  darkBg: '#1A1A1A',
   gold: '#C9A84C',
   white: '#FFFFFF',
   lightGray: '#F9F9F9',
+  medGray: '#666666',
+  border: '#E0E0E0',
   bodyBg: '#FAFAFA',
-  successBg: '#E8F5E9',
-  successText: '#2E7D32',
-  warningBg: '#FFF8E1',
-  warningText: '#F57F17',
-  errorBg: '#FFEBEE',
-  errorText: '#C62828',
+  successBg: '#E8F5E9', successText: '#2E7D32',
+  warningBg: '#FFF8E1', warningText: '#F57F17',
+  errorBg: '#FFEBEE',   errorText: '#C62828',
+  infoBg: '#E3F2FD',    infoText: '#1565C0',
+  accentRow: '#FFF8E7',
+  overdueBg: '#FFEBEE', overdueText: '#C62828',
   headerFont: 'Roboto Mono',
   bodyFont: 'Roboto',
   headerSize: 10,
@@ -43,9 +50,12 @@ const BRAND = {
   footerText: 'Powered by TAKScripts \u00B7 takscripts.store',
 };
 
+// Dashboard layout: rows 1-2 = stats bar, row 3 = column headers, row 4+ = data
+const DASHBOARD_HEADER_ROW = 3;
+
 const SHEET_NAMES = {
   clients: '\uD83D\uDC65 Clients',
-  log: '\uD83D\uDCCA Invoice Log',
+  log: '\uD83D\uDCCA Invoice Dashboard',
 };
 
 const FOLDER_NAME = '\uD83D\uDCC1 TAKScripts \u2014 Invoices';
@@ -73,10 +83,12 @@ function onOpen() {
   ui.createMenu('\uD83D\uDD77 TAKScripts')
     .addItem('\u2699\uFE0F Settings', 'showSettings')
     .addItem('\u25B6\uFE0F Generate Invoice', 'generateInvoicePrompt')
-    .addItem('\uD83D\uDCCA View Invoice Log', 'viewInvoiceLog')
+    .addItem('\u2705 Mark as Paid', 'markAsPaid')
+    .addSeparator()
+    .addItem('\uD83D\uDCCA View Dashboard', 'viewDashboard')
+    .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
     .addItem('\uD83E\uDDEA Test Run', 'testRun')
-    .addSeparator()
     .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
     .addToUi();
 }
@@ -95,35 +107,35 @@ function showSettings() {
  * Shows the about dialog.
  */
 function showAbout() {
-  const html = HtmlService.createHtmlOutput(`
-    <div style="font-family: 'Segoe UI', system-ui, sans-serif; padding: 20px; text-align: center;">
-      <div style="font-size: 32px; margin-bottom: 8px;">\uD83D\uDD77</div>
-      <h2 style="margin: 0 0 4px; font-size: 18px;">Auto Invoice Generator</h2>
-      <p style="color: #666; font-size: 12px; margin: 0 0 16px;">Version 1.0 \u00B7 by TAK Ventures</p>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;">
-      <p style="font-size: 13px; color: #333; line-height: 1.6;">
-        Part of the <strong>TAKScripts</strong> collection.<br>
-        Pre-built Google Apps Scripts for small business.
-      </p>
-      <p style="margin-top: 16px;">
-        <a href="https://takscripts.store" target="_blank"
-           style="color: #C9A84C; text-decoration: none; font-weight: 600; font-size: 13px;">
-          takscripts.store \u2192
-        </a>
-      </p>
-    </div>
-  `).setWidth(300).setHeight(280);
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font-family: \'Segoe UI\', system-ui, sans-serif; padding: 20px; text-align: center;">' +
+      '<div style="font-size: 32px; margin-bottom: 8px;">\uD83D\uDD77</div>' +
+      '<h2 style="margin: 0 0 4px; font-size: 18px;">Auto Invoice Generator</h2>' +
+      '<p style="color: #666; font-size: 12px; margin: 0 0 16px;">Version 2.0 \u00B7 by TAK Ventures</p>' +
+      '<hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;">' +
+      '<p style="font-size: 13px; color: #333; line-height: 1.6;">' +
+        'Part of the <strong>TAKScripts</strong> collection.<br>' +
+        'Pre-built Google Apps Scripts for small business.' +
+      '</p>' +
+      '<p style="margin-top: 16px;">' +
+        '<a href="https://takscripts.store" target="_blank" ' +
+           'style="color: #C9A84C; text-decoration: none; font-weight: 600; font-size: 13px;">' +
+          'takscripts.store \u2192' +
+        '</a>' +
+      '</p>' +
+    '</div>'
+  ).setWidth(300).setHeight(280);
   SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
 }
 
 /**
- * Navigates to or creates the Invoice Log sheet.
+ * Navigates to the Invoice Dashboard sheet.
  */
-function viewInvoiceLog() {
+function viewDashboard() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAMES.log);
   if (!sheet) {
-    sheet = createLogSheet_(ss);
+    sheet = getOrCreateDashboard_(ss);
   }
   ss.setActiveSheet(sheet);
 }
@@ -134,6 +146,7 @@ function viewInvoiceLog() {
 
 /**
  * Default settings for a fresh install.
+ * @return {Object} Default settings object.
  */
 function getDefaultSettings_() {
   return {
@@ -173,8 +186,197 @@ function loadSettings() {
   const defaults = getDefaultSettings_();
   if (!raw) return defaults;
   const saved = JSON.parse(raw);
-  // Merge so new setting keys are always present
   return Object.assign({}, defaults, saved);
+}
+
+// ═══════════════════════════════════════════
+// DASHBOARD — THE HEART OF THE PRODUCT
+// ═══════════════════════════════════════════
+
+/**
+ * Creates or gets the Invoice Dashboard sheet with a stats bar and branded design.
+ *
+ * Layout:
+ *   Row 1 — Stats values  (large gold numbers on dark background)
+ *   Row 2 — Stats labels  (small uppercase on dark background)
+ *   Row 3 — Column headers
+ *   Row 4+ — Invoice data
+ *
+ * Stats columns: TOTAL REVENUE | OUTSTANDING | PAID | UNPAID | OVERDUE
+ *
+ * @param {Spreadsheet} ss - The active spreadsheet.
+ * @return {Sheet} The dashboard sheet.
+ */
+function getOrCreateDashboard_(ss) {
+  let sheet = ss.getSheetByName(SHEET_NAMES.log);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(SHEET_NAMES.log, 0);
+
+  // ── Stats Row 1: Values ──
+  sheet.getRange(1, 1, 1, 5).setValues([['$0.00', '$0.00', '0', '0', '0']]);
+
+  // ── Stats Row 2: Labels ──
+  sheet.getRange(2, 1, 1, 5).setValues([[
+    'TOTAL REVENUE', 'OUTSTANDING', 'PAID', 'UNPAID', 'OVERDUE',
+  ]]);
+
+  // Style stats values (row 1) — large bold gold
+  sheet.getRange(1, 1, 1, 5)
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(22)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 56);
+
+  // Style stats labels (row 2) — tiny uppercase
+  sheet.getRange(2, 1, 1, 5)
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(8)
+    .setFontWeight('bold')
+    .setFontColor('#888888')
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('top');
+  sheet.setRowHeight(2, 22);
+
+  // Extend dark background to all columns in stat rows (covers overflow)
+  const totalCols = LOG_HEADERS.length;
+  if (totalCols > 5) {
+    sheet.getRange(1, 6, 1, totalCols - 5).setBackground(BRAND.darkBg);
+    sheet.getRange(2, 6, 1, totalCols - 5).setBackground(BRAND.darkBg);
+  }
+
+  // ── Column Headers (Row 3) ──
+  sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, LOG_HEADERS.length).setValues([LOG_HEADERS]);
+  sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, LOG_HEADERS.length)
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(BRAND.headerSize)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(DASHBOARD_HEADER_ROW, 32);
+
+  // Freeze through header row so stats + headers are always visible
+  sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
+
+  // ── Column Widths ──
+  sheet.setColumnWidth(1, 120);  // Invoice #
+  sheet.setColumnWidth(2, 200);  // Client Name
+  sheet.setColumnWidth(3, 240);  // Email
+  sheet.setColumnWidth(4, 110);  // Amount ($)
+  sheet.setColumnWidth(5, 150);  // Date Created
+  sheet.setColumnWidth(6, 150);  // Due Date
+  sheet.setColumnWidth(7, 100);  // Status
+  sheet.setColumnWidth(8, 130);  // PDF Link
+
+  // ── Footer placeholder (will shift down as data is added) ──
+  const footerRow = DASHBOARD_HEADER_ROW + 2;
+  sheet.getRange(footerRow, 1, 1, LOG_HEADERS.length).merge();
+  sheet.getRange(footerRow, 1)
+    .setValue(BRAND.footerText)
+    .setFontFamily(BRAND.bodyFont)
+    .setFontSize(9)
+    .setFontColor('#CCCCCC')
+    .setFontStyle('italic')
+    .setHorizontalAlignment('center')
+    .setBackground(BRAND.white);
+
+  // Move dashboard to first tab position
+  ss.setActiveSheet(sheet);
+  ss.moveActiveSheet(1);
+
+  return sheet;
+}
+
+/**
+ * Refreshes the stats bar (rows 1-2) by scanning all invoice data.
+ * Also re-applies overdue highlighting to past-due rows.
+ * Called from the menu or automatically after logging an invoice.
+ */
+function refreshDashboardStats() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAMES.log);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('No dashboard yet. Generate an invoice first.');
+    return;
+  }
+
+  const lastRow = sheet.getLastRow();
+  const dataStartRow = DASHBOARD_HEADER_ROW + 1;
+
+  if (lastRow < dataStartRow) {
+    // No data yet — reset stats to zero
+    sheet.getRange(1, 1, 1, 5).setValues([['$0.00', '$0.00', '0', '0', '0']]);
+    return;
+  }
+
+  const numDataRows = lastRow - dataStartRow + 1;
+  const data = sheet.getRange(dataStartRow, 1, numDataRows, LOG_HEADERS.length).getValues();
+
+  let totalRevenue = 0;
+  let outstanding = 0;
+  let paidCount = 0;
+  let unpaidCount = 0;
+  let overdueCount = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    // Skip footer / empty rows
+    if (!row[0] || String(row[0]).indexOf('Powered') !== -1) continue;
+
+    const amount = parseFloat(row[3]) || 0;
+    const status = String(row[6] || '').trim().toLowerCase();
+    const dueDateVal = row[5];
+    const dueDate = dueDateVal ? new Date(dueDateVal) : null;
+    if (dueDate) dueDate.setHours(0, 0, 0, 0);
+
+    const isOverdue = dueDate && dueDate < today && status !== 'paid';
+    const actualRow = dataStartRow + i;
+
+    if (status === 'paid') {
+      totalRevenue += amount;
+      paidCount++;
+      // Re-style paid rows with normal paid styling (in case previously overdue)
+      styleDataRow_(sheet, actualRow, LOG_HEADERS.length);
+      styleStatusCell_(sheet, actualRow, 7, 'Paid');
+    } else if (isOverdue) {
+      overdueCount++;
+      unpaidCount++;
+      // Highlight entire row in light red and update status cell
+      sheet.getRange(actualRow, 1, 1, LOG_HEADERS.length)
+        .setBackground(BRAND.overdueBg)
+        .setFontColor(BRAND.overdueText);
+      styleStatusCell_(sheet, actualRow, 7, 'Overdue');
+    } else if (status === 'sent') {
+      outstanding += amount;
+      unpaidCount++;
+      styleDataRow_(sheet, actualRow, LOG_HEADERS.length);
+      styleStatusCell_(sheet, actualRow, 7, 'Sent');
+    } else if (status === 'draft') {
+      unpaidCount++;
+      styleDataRow_(sheet, actualRow, LOG_HEADERS.length);
+      styleStatusCell_(sheet, actualRow, 7, 'Draft');
+    } else {
+      styleDataRow_(sheet, actualRow, LOG_HEADERS.length);
+    }
+  }
+
+  // Update stats bar
+  sheet.getRange(1, 1, 1, 5).setValues([[
+    '$' + totalRevenue.toFixed(2),
+    '$' + outstanding.toFixed(2),
+    String(paidCount),
+    String(unpaidCount),
+    String(overdueCount),
+  ]]);
 }
 
 // ═══════════════════════════════════════════
@@ -191,14 +393,15 @@ function createClientsSheet_(ss) {
   sheet.appendRow(CLIENT_HEADERS);
 
   // Style header row
-  const headerRange = sheet.getRange(1, 1, 1, CLIENT_HEADERS.length);
-  headerRange
+  sheet.getRange(1, 1, 1, CLIENT_HEADERS.length)
     .setFontFamily(BRAND.headerFont)
     .setFontSize(BRAND.headerSize)
     .setFontWeight('bold')
     .setFontColor(BRAND.gold)
-    .setBackground(BRAND.headerBg)
-    .setHorizontalAlignment('center');
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 32);
   sheet.setFrozenRows(1);
 
   // Column widths
@@ -219,37 +422,7 @@ function createClientsSheet_(ss) {
   styleDataRow_(sheet, 2, CLIENT_HEADERS.length);
 
   // Footer
-  addFooter_(sheet, CLIENT_HEADERS.length);
-
-  return sheet;
-}
-
-/**
- * Creates and styles the Invoice Log sheet with branded headers.
- * @param {Spreadsheet} ss - The active spreadsheet.
- * @return {Sheet} The newly created sheet.
- */
-function createLogSheet_(ss) {
-  const sheet = ss.insertSheet(SHEET_NAMES.log);
-  sheet.appendRow(LOG_HEADERS);
-
-  // Style header row
-  const headerRange = sheet.getRange(1, 1, 1, LOG_HEADERS.length);
-  headerRange
-    .setFontFamily(BRAND.headerFont)
-    .setFontSize(BRAND.headerSize)
-    .setFontWeight('bold')
-    .setFontColor(BRAND.gold)
-    .setBackground(BRAND.headerBg)
-    .setHorizontalAlignment('center');
-  sheet.setFrozenRows(1);
-
-  // Column widths
-  const widths = [120, 200, 250, 120, 140, 140, 110, 280];
-  widths.forEach((w, i) => sheet.setColumnWidth(i + 1, w));
-
-  // Footer
-  addFooter_(sheet, LOG_HEADERS.length);
+  addSheetFooter_(sheet, CLIENT_HEADERS.length);
 
   return sheet;
 }
@@ -261,18 +434,21 @@ function createLogSheet_(ss) {
  * @param {number} cols - Number of columns.
  */
 function styleDataRow_(sheet, row, cols) {
-  const range = sheet.getRange(row, 1, 1, cols);
-  range.setFontFamily(BRAND.bodyFont).setFontSize(BRAND.bodySize);
   const bg = row % 2 === 0 ? BRAND.lightGray : BRAND.white;
-  range.setBackground(bg);
+  sheet.getRange(row, 1, 1, cols)
+    .setFontFamily(BRAND.bodyFont)
+    .setFontSize(BRAND.bodySize)
+    .setFontColor('#333333')
+    .setBackground(bg)
+    .setVerticalAlignment('middle');
 }
 
 /**
- * Applies a status badge style to a cell based on status value.
+ * Applies a color-coded status badge to a cell based on status value.
  * @param {Sheet} sheet - The target sheet.
  * @param {number} row - Row number.
  * @param {number} col - Column number.
- * @param {string} status - The status text (Sent, Draft, Paid, Error).
+ * @param {string} status - The status text (Sent, Draft, Paid, Error, Overdue).
  */
 function styleStatusCell_(sheet, row, col, status) {
   const cell = sheet.getRange(row, col);
@@ -285,7 +461,10 @@ function styleStatusCell_(sheet, row, col, status) {
       cell.setBackground(BRAND.warningBg).setFontColor(BRAND.warningText);
       break;
     case 'draft':
-      cell.setBackground(BRAND.lightGray).setFontColor('#666666');
+      cell.setBackground(BRAND.lightGray).setFontColor(BRAND.medGray);
+      break;
+    case 'overdue':
+      cell.setBackground(BRAND.errorBg).setFontColor(BRAND.errorText);
       break;
     case 'error':
       cell.setBackground(BRAND.errorBg).setFontColor(BRAND.errorText);
@@ -296,12 +475,11 @@ function styleStatusCell_(sheet, row, col, status) {
 }
 
 /**
- * Adds the branded footer row to a sheet.
+ * Adds the branded footer row to a simple (non-dashboard) sheet.
  * @param {Sheet} sheet - The target sheet.
- * @param {number} cols - Number of columns to merge across.
+ * @param {number} cols - Number of columns to span.
  */
-function addFooter_(sheet, cols) {
-  // Leave a gap row, then add footer
+function addSheetFooter_(sheet, cols) {
   const lastRow = sheet.getLastRow() + 2;
   const footerRange = sheet.getRange(lastRow, 1, 1, cols);
   footerRange.merge();
@@ -363,7 +541,7 @@ function generateInvoicePrompt() {
   for (let i = 1; i < data.length; i++) {
     const name = data[i][0];
     if (name && String(name).trim()) {
-      clientNames.push((i) + '. ' + name);
+      clientNames.push(i + '. ' + name);
     }
   }
 
@@ -384,7 +562,6 @@ function generateInvoicePrompt() {
   const input = result.getResponseText().trim().toLowerCase();
 
   if (input === 'all') {
-    // Invoice all clients
     let count = 0;
     let errors = 0;
     for (let i = 1; i < data.length; i++) {
@@ -398,6 +575,7 @@ function generateInvoicePrompt() {
         }
       }
     }
+    refreshDashboardStats();
     ui.alert('Batch Complete', count + ' invoice(s) generated.' + (errors > 0 ? '\n' + errors + ' error(s) — check the log.' : ''), ui.ButtonSet.OK);
   } else {
     const rowIndex = parseInt(input, 10);
@@ -489,7 +667,7 @@ function generateInvoiceForRow_(rowData, settings, isTest) {
   // Clean up the temporary Google Doc
   DriveApp.getFileById(docId).setTrashed(true);
 
-  // Email the invoice (unless test mode)
+  // Email the invoice (unless test mode or auto-email off)
   let emailed = false;
   let status = 'Draft';
   if (!isTest && settings.autoEmail && clientEmail) {
@@ -510,7 +688,7 @@ function generateInvoiceForRow_(rowData, settings, isTest) {
     }
   }
 
-  // Log the invoice
+  // Log the invoice to the dashboard
   logInvoice_({
     invoiceNumber: invoiceNumber,
     clientName: clientName,
@@ -579,7 +757,6 @@ function createInvoiceDoc_(data) {
     emailPara.setForegroundColor('#666666');
   }
 
-  // Spacer
   body.appendParagraph('');
 
   // INVOICE title bar
@@ -600,7 +777,6 @@ function createInvoiceDoc_(data) {
   detailsPara.setForegroundColor('#333333');
   detailsPara.setAlignment(DocumentApp.HorizontalAlignment.RIGHT);
 
-  // Horizontal line
   body.appendHorizontalRule();
   body.appendParagraph('');
 
@@ -627,7 +803,6 @@ function createInvoiceDoc_(data) {
   // Table header row
   const headerRow = table.appendTableRow();
   const tableHeaders = ['Description', 'Rate', 'Qty/Hrs', 'Amount'];
-  const headerWidths = [250, 90, 90, 90];
 
   for (let i = 0; i < tableHeaders.length; i++) {
     const cell = headerRow.appendTableCell(tableHeaders[i]);
@@ -784,13 +959,11 @@ function savePdfToDrive_(pdfBlob) {
  * @param {Object} invoiceData - Invoice details for template variables.
  */
 function sendInvoiceEmail_(settings, invoiceData) {
-  // Build subject
   const subject = (settings.emailSubject || 'Invoice {{invoice_number}}')
     .replace(/\{\{invoice_number\}\}/g, invoiceData.invoiceNumber)
     .replace(/\{\{business_name\}\}/g, settings.businessName)
     .replace(/\{\{client_name\}\}/g, invoiceData.clientName);
 
-  // Build plain-text body for fallback
   const plainBody = (settings.emailBody || '')
     .replace(/\{\{invoice_number\}\}/g, invoiceData.invoiceNumber)
     .replace(/\{\{business_name\}\}/g, settings.businessName)
@@ -798,7 +971,6 @@ function sendInvoiceEmail_(settings, invoiceData) {
     .replace(/\{\{total\}\}/g, '$' + invoiceData.total.toFixed(2))
     .replace(/\{\{due_date\}\}/g, invoiceData.dueDate);
 
-  // Build HTML email
   const htmlBody = getEmailHtml_(settings, {
     clientName: invoiceData.clientName,
     invoiceNumber: invoiceData.invoiceNumber,
@@ -830,29 +1002,23 @@ function getEmailHtml_(settings, data) {
     '<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:24px 0;">' +
     '<tr><td align="center">' +
     '<table width="600" cellpadding="0" cellspacing="0" style="background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">' +
-    // Header
     '<tr><td style="background:#1A1A1A;padding:24px 32px;text-align:center;">' +
     '<span style="font-size:24px;">\uD83D\uDD77</span><br>' +
     '<span style="color:#C9A84C;font-size:16px;font-weight:700;letter-spacing:1px;">' + escapeHtml_(settings.businessName || 'TAKScripts') + '</span>' +
     '</td></tr>' +
-    // Invoice badge
     '<tr><td style="padding:24px 32px 0;text-align:center;">' +
     '<div style="display:inline-block;background:#1A1A1A;color:#C9A84C;padding:8px 24px;border-radius:4px;font-family:\'Roboto Mono\',monospace;font-size:14px;font-weight:700;letter-spacing:1px;">' +
     'INVOICE ' + escapeHtml_(data.invoiceNumber) +
     '</div>' +
     '</td></tr>' +
-    // Amount box
     '<tr><td style="padding:20px 32px;text-align:center;">' +
     '<div style="font-size:32px;font-weight:700;color:#1A1A1A;">' + escapeHtml_(data.total) + '</div>' +
     '<div style="font-size:13px;color:#888;margin-top:4px;">Due by ' + escapeHtml_(data.dueDate) + '</div>' +
     '</td></tr>' +
-    // Divider
     '<tr><td style="padding:0 32px;"><hr style="border:none;border-top:1px solid #eee;"></td></tr>' +
-    // Body text
     '<tr><td style="padding:24px 32px;font-size:14px;color:#333;">' +
     bodyLines +
     '</td></tr>' +
-    // Footer
     '<tr><td style="background:#f9f9f9;padding:16px 32px;text-align:center;border-top:1px solid #eee;">' +
     '<span style="font-size:12px;color:#999;">' + BRAND.footerText + '</span>' +
     '</td></tr>' +
@@ -866,18 +1032,20 @@ function getEmailHtml_(settings, data) {
 // ═══════════════════════════════════════════
 
 /**
- * Logs an invoice to the Invoice Log sheet.
- * Creates the sheet if it doesn't exist.
+ * Logs an invoice to the Invoice Dashboard.
+ * Creates the dashboard if it doesn't exist.
+ * Data rows start at DASHBOARD_HEADER_ROW + 1 to leave room for the stats bar.
  * @param {Object} data - Invoice log entry data.
  */
 function logInvoice_(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEET_NAMES.log);
-  if (!sheet) {
-    sheet = createLogSheet_(ss);
-  }
+  const sheet = getOrCreateDashboard_(ss);
 
-  const newRow = sheet.getLastRow() + 1;
+  // Find the next empty data row (after the stats bar and headers)
+  const lastRow = sheet.getLastRow();
+  const dataStartRow = DASHBOARD_HEADER_ROW + 1;
+  const newRow = Math.max(lastRow + 1, dataStartRow);
+
   const rowData = [
     data.invoiceNumber,
     data.clientName,
@@ -886,7 +1054,7 @@ function logInvoice_(data) {
     formatDate_(data.dateCreated),
     formatDate_(data.dueDate),
     data.status,
-    data.pdfUrl,
+    '',  // PDF link set via formula below
   ];
 
   sheet.getRange(newRow, 1, 1, rowData.length).setValues([rowData]);
@@ -894,38 +1062,40 @@ function logInvoice_(data) {
   styleStatusCell_(sheet, newRow, 7, data.status);
 
   // Make PDF link clickable
-  const linkCell = sheet.getRange(newRow, 8);
   if (data.pdfUrl) {
-    linkCell.setFormula('=HYPERLINK("' + data.pdfUrl + '","View PDF")');
-    linkCell.setFontColor('#C9A84C');
+    sheet.getRange(newRow, 8).setFormula('=HYPERLINK("' + data.pdfUrl + '","View PDF")');
+    sheet.getRange(newRow, 8).setFontColor(BRAND.gold).setHorizontalAlignment('center');
   }
+
+  // Refresh stats after each new invoice
+  refreshDashboardStats();
 }
 
 /**
- * Marks a selected invoice row in the log as "Paid".
- * Triggered by selecting a row and using the menu or running directly.
+ * Marks a selected invoice row in the dashboard as "Paid".
+ * Select any cell in the invoice row first, then run from the menu.
  */
 function markAsPaid() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.log);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('No invoice log found.');
+    SpreadsheetApp.getUi().alert('No invoice dashboard found. Generate an invoice first.');
     return;
   }
 
   const activeRange = sheet.getActiveRange();
   if (!activeRange) {
-    SpreadsheetApp.getUi().alert('Select a row in the Invoice Log first.');
+    SpreadsheetApp.getUi().alert('Select a row in the Invoice Dashboard first.');
     return;
   }
 
   const row = activeRange.getRow();
-  if (row <= 1) {
-    SpreadsheetApp.getUi().alert('Select a data row, not the header.');
+  if (row <= DASHBOARD_HEADER_ROW) {
+    SpreadsheetApp.getUi().alert('Select a data row below the headers.');
     return;
   }
 
-  const statusCol = 7; // Status column
+  const statusCol = 7;
   const currentStatus = sheet.getRange(row, statusCol).getValue();
 
   if (String(currentStatus).toLowerCase() === 'paid') {
@@ -934,27 +1104,31 @@ function markAsPaid() {
   }
 
   sheet.getRange(row, statusCol).setValue('Paid');
+  // Restore normal row color (remove any overdue red highlighting)
+  styleDataRow_(sheet, row, LOG_HEADERS.length);
   styleStatusCell_(sheet, row, statusCol, 'Paid');
 
   const invoiceNum = sheet.getRange(row, 1).getValue();
-  SpreadsheetApp.getUi().alert('Invoice ' + invoiceNum + ' marked as Paid.');
+  refreshDashboardStats();
+  SpreadsheetApp.getUi().alert('Invoice ' + invoiceNum + ' marked as Paid. Dashboard updated.');
 }
 
 /**
- * Adds a right-click / edit menu option to mark as paid.
- * Called via installable trigger or can be added to the menu.
+ * Auto-styles status cells when a user manually edits the Status column.
+ * @param {Object} e - The onEdit event object.
  */
 function onEdit(e) {
-  // If user manually types "Paid" in the status column, apply styling
   if (!e || !e.range) return;
   const sheet = e.range.getSheet();
   if (sheet.getName() !== SHEET_NAMES.log) return;
   if (e.range.getColumn() !== 7) return; // Status column
-  if (e.range.getRow() <= 1) return;
+  if (e.range.getRow() <= DASHBOARD_HEADER_ROW) return;
 
   const value = String(e.value || '').trim();
-  if (['paid', 'sent', 'draft', 'error'].includes(value.toLowerCase())) {
+  if (['paid', 'sent', 'draft', 'error', 'overdue'].includes(value.toLowerCase())) {
+    styleDataRow_(sheet, e.range.getRow(), LOG_HEADERS.length);
     styleStatusCell_(sheet, e.range.getRow(), 7, value);
+    refreshDashboardStats();
   }
 }
 
@@ -981,7 +1155,6 @@ function testRun() {
     return;
   }
 
-  // Use first client or create sample data
   let testData;
   const clientSheet = ss.getSheetByName(SHEET_NAMES.clients);
   if (clientSheet && clientSheet.getLastRow() > 1) {
@@ -1008,7 +1181,7 @@ function testRun() {
       'Amount: $' + invoice.total.toFixed(2) + '\n\n' +
       'No email was sent.\n' +
       'PDF saved to Drive folder: ' + FOLDER_NAME + '\n' +
-      'Check the Invoice Log for details.',
+      'Check the Invoice Dashboard for details.',
       ui.ButtonSet.OK
     );
   } catch (e) {
@@ -1035,7 +1208,7 @@ function formatDate_(date) {
 }
 
 /**
- * Escapes HTML special characters to prevent XSS in email templates.
+ * Escapes HTML special characters to prevent injection in email templates.
  * @param {string} text - Raw text.
  * @return {string} HTML-safe text.
  */
@@ -1055,7 +1228,7 @@ function escapeHtml_(text) {
 
 /**
  * Ensures all required sheets exist. Safe to call multiple times.
- * Called automatically on first menu interaction.
+ * Called from the settings sidebar's "Initialize Sheets" button.
  */
 function initializeSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1065,14 +1238,14 @@ function initializeSheets() {
   }
 
   if (!ss.getSheetByName(SHEET_NAMES.log)) {
-    createLogSheet_(ss);
+    getOrCreateDashboard_(ss);
   }
 
   SpreadsheetApp.getUi().alert(
     'Setup Complete',
     'Your sheets are ready:\n\n' +
-    '\u2022 ' + SHEET_NAMES.clients + ' \u2014 Add your client data here\n' +
-    '\u2022 ' + SHEET_NAMES.log + ' \u2014 Invoices will be tracked here\n\n' +
+    '\u2022 ' + SHEET_NAMES.log + ' \u2014 Revenue dashboard and invoice log\n' +
+    '\u2022 ' + SHEET_NAMES.clients + ' \u2014 Add your client data here\n\n' +
     'Next step: Go to \uD83D\uDD77 TAKScripts \u2192 \u2699\uFE0F Settings to configure your business details.',
     SpreadsheetApp.getUi().ButtonSet.OK
   );
