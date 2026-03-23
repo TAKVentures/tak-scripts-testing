@@ -78,6 +78,43 @@ If a script requires the customer to edit a variable in the code, it is NOT read
 
 ---
 
+## Brand Touchpoints by Tool
+
+Every script must feel premium regardless of which Google tool it uses. Here's how to apply branding across each touchpoint:
+
+### Full Design Control (brand heavily)
+
+| Touchpoint | What We Control | Brand Standard |
+|------------|----------------|----------------|
+| **Sheets Dashboard** | Colors, fonts, borders, merging, conditional formatting | Gold/dark stats row, merged stat cards, alternating backgrounds, table borders, color-coded status cells, branded footer |
+| **Sidebar / Settings UI** | Full HTML/CSS | Dark header (#1A1A1A), gold TAKScripts text, white body, rounded inputs, gold focus states. **This is the universal brand surface — every script has one.** |
+| **Custom Menu** | Menu name, items, separators | Always "🕷 TAKScripts" with emoji-prefixed items. Works in Sheets, Docs, Slides, Forms. |
+| **About Dialog** | Full HTML/CSS | Spider icon, version, TAK Ventures credit, takscripts.store link |
+| **Email Output** | Full HTML/CSS | Dark header bar, gold brand text, system font 14px, branded footer with script name |
+| **Google Docs Output** | Fonts, colors, tables, headers, page formatting | Roboto fonts, dark/gold table headers, professional layout, branded footer |
+| **Google Slides Output** | Colors, layouts, shapes, images | Dark/gold color theme, branded title slide, consistent typography |
+| **Drive Folders** | Folder/file naming | Emoji prefix, "TAKScripts — [Purpose]" format, underscores in filenames |
+
+### Limited Design Control (brand where possible)
+
+| Touchpoint | What We Control | Brand Standard |
+|------------|----------------|----------------|
+| **Calendar Events** | Title, description, color | Consistent title format: "[TAKScripts] Event Name". Detailed HTML description. Use Grape or Banana color (closest to gold). |
+| **Google Forms** | Theme color, header image, confirmation message | Set theme color to #C9A84C (gold). Add TAKScripts header image if possible. Branded confirmation message. |
+| **Google Chat Cards** | Card title, sections, buttons, text formatting | "🕷 TAKScripts" in card header. Structured sections. Action buttons with descriptive labels. |
+| **Google Contacts** | Labels/groups only | Use "TAKScripts" prefix on group names |
+| **Google Tasks** | Task title, notes | Consistent title format, detailed notes |
+
+### The Universal Rule
+**If a tool allows a sidebar → add the branded sidebar.**
+**If a tool allows a menu → add "🕷 TAKScripts" menu.**
+**If a tool sends email → use branded HTML.**
+**If a tool creates files/folders → use emoji naming convention.**
+
+The sidebar + menu combo is the minimum brand footprint for any script. Customers should always see the spider icon and gold/dark theme somewhere in the experience.
+
+---
+
 ## Google Sheets Design Standards
 
 Every script that creates or modifies a Google Sheet should follow these rules:
