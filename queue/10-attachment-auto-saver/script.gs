@@ -155,6 +155,7 @@ function getDefaultSettings_() {
   return {
     searchQuery: 'has:attachment',
     sourceLabel: '',
+    senders: '',
     destinationFolderId: '',
     destinationFolderName: '',
     organizationMode: 'sender',
@@ -171,7 +172,11 @@ function getDefaultSettings_() {
 function saveSettings(settings) {
   var props = PropertiesService.getScriptProperties();
   props.setProperty(PROP_SETTINGS, JSON.stringify(settings));
-  updateScheduleTrigger_(settings.autoSchedule);
+  try {
+    updateScheduleTrigger_(settings.autoSchedule);
+  } catch (e) {
+    Logger.log('Trigger update skipped: ' + e.message);
+  }
   return { success: true };
 }
 
@@ -1029,6 +1034,19 @@ function sanitizeFolderName_(name) {
 
 function buildSearchQuery_(settings) {
   var parts = ['has:attachment'];
+
+  // Multiple senders — joined with OR into a group: (from:a OR from:b)
+  if (settings.senders && settings.senders.trim()) {
+    var senderList = settings.senders.split(',')
+      .map(function(s) { return s.trim(); })
+      .filter(function(s) { return s.length > 0; });
+    if (senderList.length === 1) {
+      parts.push('from:' + senderList[0]);
+    } else if (senderList.length > 1) {
+      parts.push('(' + senderList.map(function(s) { return 'from:' + s; }).join(' OR ') + ')');
+    }
+  }
+
   if (settings.sourceLabel) parts.push('label:' + settings.sourceLabel);
   if (settings.searchQuery && settings.searchQuery !== 'has:attachment') {
     parts.push(settings.searchQuery);
@@ -1325,6 +1343,12 @@ function getSettingsHtml() {
 '    <div class="section-title">Source</div>\n' +
 '\n' +
 '    <div class="field">\n' +
+'      <label>Senders (optional)</label>\n' +
+'      <textarea id="senders" rows="3" placeholder="accounting@acme.com, invoices@supplier.com, orders@shop.com" style="font-family: inherit; font-size: 12px; resize: vertical;"></textarea>\n' +
+'      <div class="help">Comma-separated. Only save attachments from these senders. Leave blank for all senders.</div>\n' +
+'    </div>\n' +
+'\n' +
+'    <div class="field">\n' +
 '      <label>Gmail Label (optional)</label>\n' +
 '      <input type="text" id="sourceLabel" placeholder="e.g. Invoices, Receipts" />\n' +
 '      <div class="help">Only scan emails with this label. Leave blank for all.</div>\n' +
@@ -1407,6 +1431,7 @@ function getSettingsHtml() {
 '\n' +
 '  <script>\n' +
 '    google.script.run.withSuccessHandler(function(settings) {\n' +
+'      document.getElementById("senders").value = settings.senders || "";\n' +
 '      document.getElementById("sourceLabel").value = settings.sourceLabel || "";\n' +
 '      document.getElementById("searchQuery").value = settings.searchQuery || "";\n' +
 '      document.getElementById("destinationFolderId").value = settings.destinationFolderId || "";\n' +
@@ -1433,6 +1458,7 @@ function getSettingsHtml() {
 '        if (checks[i].checked) filters.push(checks[i].value);\n' +
 '      }\n' +
 '      var settings = {\n' +
+'        senders: document.getElementById("senders").value.trim(),\n' +
 '        sourceLabel: document.getElementById("sourceLabel").value.trim(),\n' +
 '        searchQuery: document.getElementById("searchQuery").value.trim(),\n' +
 '        destinationFolderId: document.getElementById("destinationFolderId").value.trim(),\n' +
