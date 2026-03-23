@@ -2,21 +2,23 @@
  * Email Invoice Detector by TAKScripts
  * =====================================
  * Automatically scans your Gmail inbox for invoices, receipts, and payment
- * confirmations, then logs them to a branded Google Sheet.
+ * confirmations, then logs them to a branded expense dashboard.
  *
  * Features:
  * - Custom menu in Sheets — no need to touch the script editor
- * - Beautiful settings sidebar for configuration
+ * - Expense dashboard: This Month total, All Time total, Largest invoice,
+ *   Top category, and total count — always up to date
  * - Detects invoices, receipts, payment confirmations, order confirmations
  * - Extracts sender, date, subject, detected amount, and category
- * - Logs everything to a branded "📊 Invoice Log" sheet
- * - Configurable scan frequency, Gmail label, amount threshold alerts, categories
+ * - Color-coded category badges on every row
+ * - Configurable scan frequency, Gmail label, amount threshold alerts
  * - Runs on a schedule (time-driven trigger) or manually
  * - Idempotent — tracks processed message IDs to prevent duplicates
  * - Test Run mode shows detections without logging
  * - HTML-formatted alert emails for high-amount invoices
+ * - Refresh Stats recalculates dashboard totals at any time
  *
- * Version: 1.0
+ * Version: 2.0
  * By TAK Ventures — takscripts.store
  */
 
@@ -24,28 +26,60 @@
 // CONSTANTS
 // ═══════════════════════════════════════════
 
-const SCRIPT_NAME = 'Email Invoice Detector';
-const LOG_SHEET_NAME = '📊 Invoice Log';
-const SETTINGS_SHEET_NAME = '⚙️ Settings';
+const BRAND = {
+  darkBg: '#1A1A1A',
+  gold: '#C9A84C',
+  white: '#FFFFFF',
+  lightGray: '#F9F9F9',
+  medGray: '#666666',
+  border: '#E0E0E0',
+  successBg: '#E8F5E9', successText: '#2E7D32',
+  warningBg: '#FFF8E1', warningText: '#F57F17',
+  errorBg: '#FFEBEE',   errorText: '#C62828',
+  infoBg: '#E3F2FD',    infoText: '#1565C0',
+  headerFont: 'Roboto Mono',
+  bodyFont: 'Roboto',
+  footerText: 'Powered by TAKScripts \u00B7 takscripts.store',
+};
+
+// Dashboard layout: rows 1-2 = stats bar, row 3 = column headers, row 4+ = data
+const DASHBOARD_HEADER_ROW = 3;
+
+const DASHBOARD_SHEET_NAME = '\uD83D\uDCCA Expense Dashboard';
 const PROP_SETTINGS = 'eid_settings';
 const PROP_PROCESSED = 'eid_processed_ids';
 
+// Column index map (1-based)
+const COL = {
+  date:           1,
+  sender:         2,
+  subject:        3,
+  amount:         4,
+  amountNumeric:  5,
+  category:       6,
+  keyword:        7,
+  messageId:      8,
+};
+
+const LOG_HEADERS = [
+  'Date', 'Sender', 'Subject', 'Amount',
+  'Amount (Numeric)', 'Category', 'Matched Keyword', 'Message ID',
+];
+
 /**
- * Keywords used to identify invoices and receipts.
- * Grouped by category for classification.
+ * Keywords used to identify invoices and receipts, grouped by category.
  */
 const DETECTION_RULES = {
-  'Invoice': ['invoice', 'inv #', 'inv#', 'invoice number', 'invoice attached', 'invoice enclosed'],
-  'Receipt': ['receipt', 'your receipt', 'payment receipt', 'transaction receipt', 'e-receipt'],
+  'Invoice':              ['invoice', 'inv #', 'inv#', 'invoice number', 'invoice attached', 'invoice enclosed'],
+  'Receipt':              ['receipt', 'your receipt', 'payment receipt', 'transaction receipt', 'e-receipt'],
   'Payment Confirmation': ['payment confirmation', 'payment received', 'payment successful', 'payment processed', 'payment accepted'],
-  'Order Confirmation': ['order confirmation', 'order confirmed', 'order #', 'order number', 'order summary', 'your order'],
-  'Subscription': ['subscription', 'recurring payment', 'renewal', 'monthly charge', 'annual charge', 'billing cycle'],
-  'Refund': ['refund', 'refunded', 'credit issued', 'money back'],
+  'Order Confirmation':   ['order confirmation', 'order confirmed', 'order #', 'order number', 'order summary', 'your order'],
+  'Subscription':         ['subscription', 'recurring payment', 'renewal', 'monthly charge', 'annual charge', 'billing cycle'],
+  'Refund':               ['refund', 'refunded', 'credit issued', 'money back'],
 };
 
 /**
- * Amount regex patterns to detect prices in email subjects and bodies.
- * Supports: $1,234.56 | USD 1234.56 | 1,234.56 USD | EUR 50.00
+ * Amount regex patterns — supports $, USD, EUR, GBP, £, €.
  */
 const AMOUNT_PATTERNS = [
   /\$\s?[\d,]+\.?\d{0,2}/g,
@@ -58,7 +92,6 @@ const AMOUNT_PATTERNS = [
   /€\s?[\d,]+\.?\d{0,2}/g,
 ];
 
-
 // ═══════════════════════════════════════════
 // MENU & UI
 // ═══════════════════════════════════════════
@@ -69,14 +102,15 @@ const AMOUNT_PATTERNS = [
  */
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
-  ui.createMenu('🕷 TAKScripts')
-    .addItem('⚙️ Settings', 'showSettings')
-    .addItem('▶️ Run Scan Now', 'runScan')
+  ui.createMenu('\uD83D\uDD77 TAKScripts')
+    .addItem('\u2699\uFE0F Settings', 'showSettings')
+    .addItem('\u25B6\uFE0F Run Scan Now', 'runScan')
     .addSeparator()
-    .addItem('🧪 Test Run (no logging)', 'testRun')
-    .addItem('📊 View Invoice Log', 'viewLog')
+    .addItem('\uD83D\uDCCA View Dashboard', 'viewDashboard')
+    .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
-    .addItem('ℹ️ About TAKScripts', 'showAbout')
+    .addItem('\uD83E\uDDEA Test Run (no logging)', 'testRun')
+    .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
     .addToUi();
 }
 
@@ -94,44 +128,40 @@ function showSettings() {
  * Shows the about dialog.
  */
 function showAbout() {
-  const html = HtmlService.createHtmlOutput(`
-    <div style="font-family: 'Segoe UI', system-ui, sans-serif; padding: 20px; text-align: center;">
-      <div style="font-size: 32px; margin-bottom: 8px;">🕷</div>
-      <h2 style="margin: 0 0 4px; font-size: 18px;">Email Invoice Detector</h2>
-      <p style="color: #666; font-size: 12px; margin: 0 0 16px;">Version 1.0 · by TAK Ventures</p>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;">
-      <p style="font-size: 13px; color: #333; line-height: 1.6;">
-        Automatically finds invoices and receipts in your Gmail
-        and logs them to a clean, organized spreadsheet.<br><br>
-        Part of the <strong>TAKScripts</strong> collection.<br>
-        Pre-built Google Apps Scripts for small business.
-      </p>
-      <p style="margin-top: 16px;">
-        <a href="https://takscripts.store" target="_blank"
-           style="color: #C9A84C; text-decoration: none; font-weight: 600; font-size: 13px;">
-          takscripts.store →
-        </a>
-      </p>
-    </div>
-  `).setWidth(300).setHeight(320);
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font-family: \'Segoe UI\', system-ui, sans-serif; padding: 20px; text-align: center;">' +
+      '<div style="font-size: 32px; margin-bottom: 8px;">\uD83D\uDD77</div>' +
+      '<h2 style="margin: 0 0 4px; font-size: 18px;">Email Invoice Detector</h2>' +
+      '<p style="color: #666; font-size: 12px; margin: 0 0 16px;">Version 2.0 \u00B7 by TAK Ventures</p>' +
+      '<hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;">' +
+      '<p style="font-size: 13px; color: #333; line-height: 1.6;">' +
+        'Automatically finds invoices and receipts in your Gmail<br>' +
+        'and logs them to a clean expense dashboard.<br><br>' +
+        'Part of the <strong>TAKScripts</strong> collection.<br>' +
+        'Pre-built Google Apps Scripts for small business.' +
+      '</p>' +
+      '<p style="margin-top: 16px;">' +
+        '<a href="https://takscripts.store" target="_blank" ' +
+           'style="color: #C9A84C; text-decoration: none; font-weight: 600; font-size: 13px;">' +
+          'takscripts.store \u2192' +
+        '</a>' +
+      '</p>' +
+    '</div>'
+  ).setWidth(300).setHeight(320);
   SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
 }
 
 /**
- * Navigates to the invoice log sheet, or alerts if none exists yet.
+ * Navigates to the Expense Dashboard sheet.
  */
-function viewLog() {
+function viewDashboard() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(LOG_SHEET_NAME);
+  let sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert(
-      'No invoice log yet.\n\nRun a scan from the TAKScripts menu and detected invoices will appear here.'
-    );
-    return;
+    sheet = getOrCreateDashboard_(ss);
   }
   ss.setActiveSheet(sheet);
 }
-
 
 // ═══════════════════════════════════════════
 // SETTINGS MANAGEMENT
@@ -139,6 +169,7 @@ function viewLog() {
 
 /**
  * Returns default settings when none are saved.
+ * @return {Object} Default settings object.
  */
 function getDefaultSettings_() {
   return {
@@ -156,20 +187,17 @@ function getDefaultSettings_() {
 /**
  * Save settings from the sidebar.
  * @param {Object} settings - The settings object from the sidebar form.
- * @returns {Object} Success confirmation.
+ * @return {Object} Success confirmation.
  */
 function saveSettings(settings) {
   try {
     const props = PropertiesService.getScriptProperties();
     props.setProperty(PROP_SETTINGS, JSON.stringify(settings));
-
-    // Manage auto-trigger based on settings
     if (settings.enableAutoTrigger) {
       installTrigger_(parseInt(settings.frequency, 10) || 60);
     } else {
       removeTrigger_();
     }
-
     return { success: true };
   } catch (e) {
     Logger.log('Error saving settings: ' + e.message);
@@ -179,24 +207,206 @@ function saveSettings(settings) {
 
 /**
  * Load saved settings, falling back to defaults.
- * @returns {Object} The merged settings.
+ * @return {Object} The merged settings.
  */
 function loadSettings() {
   const props = PropertiesService.getScriptProperties();
   const raw = props.getProperty(PROP_SETTINGS);
   const defaults = getDefaultSettings_();
   if (!raw) return defaults;
-
   try {
-    const saved = JSON.parse(raw);
-    // Merge with defaults so new fields always exist
-    return Object.assign({}, defaults, saved);
+    return Object.assign({}, defaults, JSON.parse(raw));
   } catch (e) {
     Logger.log('Corrupted settings, returning defaults: ' + e.message);
     return defaults;
   }
 }
 
+// ═══════════════════════════════════════════
+// DASHBOARD — THE HEART OF THE PRODUCT
+// ═══════════════════════════════════════════
+
+/**
+ * Creates or gets the Expense Dashboard sheet with a stats bar and branded design.
+ *
+ * Layout:
+ *   Row 1 — Stats values  (large gold numbers on dark background)
+ *   Row 2 — Stats labels  (small uppercase on dark background)
+ *   Row 3 — Column headers
+ *   Row 4+ — Invoice/expense data
+ *
+ * Stats: THIS MONTH | ALL TIME | LARGEST | TOP CATEGORY | TOTAL
+ *
+ * @param {Spreadsheet} ss - The active spreadsheet.
+ * @return {Sheet} The dashboard sheet.
+ */
+function getOrCreateDashboard_(ss) {
+  let sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(DASHBOARD_SHEET_NAME, 0);
+
+  // ── Stats Row 1: Values ──
+  sheet.getRange(1, 1, 1, 5).setValues([['$0', '$0', '$0', '—', '0']]);
+
+  // ── Stats Row 2: Labels ──
+  sheet.getRange(2, 1, 1, 5).setValues([[
+    'THIS MONTH', 'ALL TIME', 'LARGEST', 'TOP CATEGORY', 'TOTAL',
+  ]]);
+
+  // Style stats values (row 1) — large bold gold
+  sheet.getRange(1, 1, 1, 5)
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(20)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 56);
+
+  // Style stats labels (row 2) — tiny uppercase
+  sheet.getRange(2, 1, 1, 5)
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(8)
+    .setFontWeight('bold')
+    .setFontColor('#888888')
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('top');
+  sheet.setRowHeight(2, 22);
+
+  // Extend dark background to all columns in stat rows
+  const totalCols = LOG_HEADERS.length;
+  if (totalCols > 5) {
+    sheet.getRange(1, 6, 1, totalCols - 5).setBackground(BRAND.darkBg);
+    sheet.getRange(2, 6, 1, totalCols - 5).setBackground(BRAND.darkBg);
+  }
+
+  // ── Column Headers (Row 3) ──
+  sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, LOG_HEADERS.length).setValues([LOG_HEADERS]);
+  sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, LOG_HEADERS.length)
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(10)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('left')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(DASHBOARD_HEADER_ROW, 32);
+
+  // Freeze through header row
+  sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
+
+  // ── Column Widths ──
+  sheet.setColumnWidth(COL.date,          160);
+  sheet.setColumnWidth(COL.sender,        230);
+  sheet.setColumnWidth(COL.subject,       320);
+  sheet.setColumnWidth(COL.amount,        110);
+  sheet.setColumnWidth(COL.amountNumeric, 130);
+  sheet.setColumnWidth(COL.category,      160);
+  sheet.setColumnWidth(COL.keyword,       150);
+  sheet.setColumnWidth(COL.messageId,     160);
+
+  // Hide internal columns (Message ID used for dedup, Amount Numeric for calculations)
+  sheet.hideColumns(COL.messageId);
+
+  // Move to first tab
+  ss.setActiveSheet(sheet);
+  ss.moveActiveSheet(1);
+
+  return sheet;
+}
+
+/**
+ * Refreshes the stats bar (rows 1-2) by scanning all logged invoice data.
+ * Computes: This Month total, All Time total, Largest single invoice,
+ * Top category by frequency, and total count.
+ */
+function refreshDashboardStats() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert('No dashboard yet. Run a scan first.');
+    return;
+  }
+
+  const lastRow = sheet.getLastRow();
+  const dataStartRow = DASHBOARD_HEADER_ROW + 1;
+
+  if (lastRow < dataStartRow) {
+    sheet.getRange(1, 1, 1, 5).setValues([['$0', '$0', '$0', '—', '0']]);
+    return;
+  }
+
+  const numDataRows = lastRow - dataStartRow + 1;
+  const data = sheet.getRange(dataStartRow, 1, numDataRows, LOG_HEADERS.length).getValues();
+
+  let thisMonth = 0;
+  let allTime = 0;
+  let largest = 0;
+  let largestFormatted = '$0';
+  let total = 0;
+  const categoryCounts = {};
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    if (!row[COL.date - 1]) continue;
+
+    const dateVal = row[COL.date - 1];
+    const amountNumeric = parseFloat(row[COL.amountNumeric - 1]) || 0;
+    const amountFormatted = String(row[COL.amount - 1] || '');
+    const category = String(row[COL.category - 1] || '').trim();
+
+    total++;
+
+    // This month
+    const rowDate = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
+    if (!isNaN(rowDate.getTime()) &&
+        rowDate.getMonth() === currentMonth &&
+        rowDate.getFullYear() === currentYear) {
+      thisMonth += amountNumeric;
+    }
+
+    allTime += amountNumeric;
+
+    if (amountNumeric > largest) {
+      largest = amountNumeric;
+      largestFormatted = amountFormatted || ('$' + amountNumeric.toFixed(2));
+    }
+
+    if (category) {
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    }
+  }
+
+  // Find top category
+  let topCategory = '—';
+  let topCount = 0;
+  for (const cat in categoryCounts) {
+    if (categoryCounts[cat] > topCount) {
+      topCount = categoryCounts[cat];
+      topCategory = cat;
+    }
+  }
+
+  // Format currency values
+  const fmt = function(n) {
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  };
+
+  sheet.getRange(1, 1, 1, 5).setValues([[
+    fmt(thisMonth),
+    fmt(allTime),
+    largestFormatted || '$0',
+    topCategory,
+    String(total),
+  ]]);
+}
 
 // ═══════════════════════════════════════════
 // TRIGGER MANAGEMENT
@@ -209,38 +419,26 @@ function loadSettings() {
  */
 function installTrigger_(intervalMinutes) {
   removeTrigger_();
-
-  // Apps Script only supports specific intervals: 1, 5, 10, 15, 30, 60
   const validIntervals = [1, 5, 10, 15, 30];
   if (validIntervals.includes(intervalMinutes)) {
-    ScriptApp.newTrigger('runScan')
-      .timeBased()
-      .everyMinutes(intervalMinutes)
-      .create();
+    ScriptApp.newTrigger('runScan').timeBased().everyMinutes(intervalMinutes).create();
   } else {
-    // For 60+ minutes, use everyHours
     const hours = Math.max(1, Math.round(intervalMinutes / 60));
-    ScriptApp.newTrigger('runScan')
-      .timeBased()
-      .everyHours(hours)
-      .create();
+    ScriptApp.newTrigger('runScan').timeBased().everyHours(hours).create();
   }
-
   Logger.log('Trigger installed: every ' + intervalMinutes + ' minutes.');
 }
 
 /**
- * Removes any existing scan triggers.
+ * Removes any existing runScan triggers.
  */
 function removeTrigger_() {
-  const triggers = ScriptApp.getProjectTriggers();
-  for (const trigger of triggers) {
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
     if (trigger.getHandlerFunction() === 'runScan') {
       ScriptApp.deleteTrigger(trigger);
     }
-  }
+  });
 }
-
 
 // ═══════════════════════════════════════════
 // CORE ENGINE
@@ -254,23 +452,21 @@ function runScan() {
   const settings = loadSettings();
   const results = scanEmails_(settings, false);
 
-  // Show summary if run manually (not from trigger)
   try {
     const ui = SpreadsheetApp.getUi();
     if (results.total === 0) {
-      ui.alert('✅ Scan Complete\n\nNo new invoices or receipts found.');
+      ui.alert('\u2705 Scan Complete\n\nNo new invoices or receipts found.');
     } else {
       ui.alert(
-        '✅ Scan Complete\n\n' +
+        '\u2705 Scan Complete\n\n' +
         'Found ' + results.total + ' new invoice/receipt email(s).\n' +
-        'Logged to "' + LOG_SHEET_NAME + '" sheet.\n\n' +
+        'Logged to the Expense Dashboard.\n\n' +
         (results.alerts > 0
-          ? '⚠️ ' + results.alerts + ' item(s) exceeded your amount threshold.'
+          ? '\u26A0\uFE0F ' + results.alerts + ' item(s) exceeded your amount threshold.'
           : 'No threshold alerts triggered.')
       );
     }
   } catch (e) {
-    // Running from trigger — no UI available, that's fine
     Logger.log('Scan complete. Found ' + results.total + ' new items.');
   }
 }
@@ -282,9 +478,7 @@ function testRun() {
   const settings = loadSettings();
   const results = scanEmails_(settings, true);
 
-  const lines = [];
-  lines.push('🧪 TEST RUN — Nothing was logged');
-  lines.push('');
+  const lines = ['\uD83E\uDDEA TEST RUN \u2014 Nothing was logged', ''];
 
   if (results.items.length === 0) {
     lines.push('No invoices or receipts detected in the scanned emails.');
@@ -292,8 +486,7 @@ function testRun() {
     lines.push('Searched: ' + results.threadsScanned + ' thread(s) from the last ' + (settings.scanAge || 7) + ' day(s).');
   } else {
     lines.push('Detected ' + results.items.length + ' invoice/receipt email(s):');
-    lines.push('─'.repeat(40));
-
+    lines.push('\u2500'.repeat(40));
     for (const item of results.items) {
       lines.push('');
       lines.push('From: ' + item.sender);
@@ -304,20 +497,16 @@ function testRun() {
     }
   }
 
-  const output = lines.join('\n');
-  Logger.log(output);
-  SpreadsheetApp.getUi().alert(output);
+  SpreadsheetApp.getUi().alert(lines.join('\n'));
 }
 
 /**
  * Core scanning logic. Processes Gmail threads and detects invoices.
- *
  * @param {Object} settings - Current settings.
  * @param {boolean} dryRun - If true, detect but don't log or send alerts.
- * @returns {Object} Results summary { total, alerts, items, threadsScanned }.
+ * @return {Object} Results summary { total, alerts, items, threadsScanned }.
  */
 function scanEmails_(settings, dryRun) {
-  // Build Gmail search query
   const age = parseInt(settings.scanAge, 10) || 7;
   let query = 'newer_than:' + age + 'd';
   if (settings.scanLabel && settings.scanLabel.trim()) {
@@ -326,7 +515,6 @@ function scanEmails_(settings, dryRun) {
     query += ' in:inbox';
   }
 
-  // Load processed message IDs to prevent duplicates
   const props = PropertiesService.getScriptProperties();
   const processedRaw = props.getProperty(PROP_PROCESSED) || '[]';
   let processedIds;
@@ -336,11 +524,8 @@ function scanEmails_(settings, dryRun) {
     processedIds = new Set();
   }
 
-  // Determine which categories to scan for
   const enabledCategories = (settings.categories || Object.keys(DETECTION_RULES).join(', '))
-    .split(',')
-    .map(c => c.trim())
-    .filter(Boolean);
+    .split(',').map(function(c) { return c.trim(); }).filter(Boolean);
 
   const threshold = parseFloat(settings.alertThreshold) || 0;
   const results = { total: 0, alerts: 0, items: [], threadsScanned: 0 };
@@ -356,43 +541,33 @@ function scanEmails_(settings, dryRun) {
   results.threadsScanned = threads.length;
 
   for (const thread of threads) {
-    const messages = thread.getMessages();
-
-    for (const message of messages) {
+    for (const message of thread.getMessages()) {
       const messageId = message.getId();
-
-      // Skip already-processed messages (idempotency)
       if (processedIds.has(messageId)) continue;
 
       const subject = message.getSubject() || '';
       const from = message.getFrom() || '';
       const date = message.getDate();
       let body = '';
-
       try {
         body = message.getPlainBody() || '';
       } catch (e) {
-        // Some messages may not have a plain body
         body = '';
       }
 
-      // Check if this message matches any detection rules
       const detection = detectInvoice_(subject, body, enabledCategories);
       if (!detection.matched) continue;
 
-      // Extract the highest amount mentioned
       const amount = extractAmount_(subject, body);
-
-      const senderEmail = extractEmail_(from);
       const item = {
-        messageId: messageId,
-        sender: from,
-        senderEmail: senderEmail,
-        subject: subject,
-        date: formatDate_(date),
-        rawDate: date,
-        category: detection.category,
-        amount: amount.formatted,
+        messageId:     messageId,
+        sender:        from,
+        senderEmail:   extractEmail_(from),
+        subject:       subject,
+        date:          formatDate_(date),
+        rawDate:       date,
+        category:      detection.category,
+        amount:        amount.formatted,
         amountNumeric: amount.numeric,
         matchedKeyword: detection.keyword,
       };
@@ -401,13 +576,9 @@ function scanEmails_(settings, dryRun) {
       results.total++;
 
       if (!dryRun) {
-        // Log to sheet
         logInvoice_(item);
-
-        // Mark as processed
         processedIds.add(messageId);
 
-        // Check threshold for alerts
         if (settings.enableAlerts && threshold > 0 && amount.numeric >= threshold) {
           results.alerts++;
           sendThresholdAlert_(item, threshold, settings.alertEmail);
@@ -416,11 +587,10 @@ function scanEmails_(settings, dryRun) {
     }
   }
 
-  // Persist processed IDs (keep only last 5000 to avoid property size limits)
   if (!dryRun && results.total > 0) {
-    const processedArray = [...processedIds];
-    const trimmed = processedArray.slice(-5000);
+    const trimmed = [...processedIds].slice(-5000);
     props.setProperty(PROP_PROCESSED, JSON.stringify(trimmed));
+    refreshDashboardStats();
   }
 
   Logger.log('Scan finished. Detected: ' + results.total + ', Alerts: ' + results.alerts);
@@ -429,50 +599,41 @@ function scanEmails_(settings, dryRun) {
 
 /**
  * Checks if a message subject or body matches invoice/receipt keywords.
- *
  * @param {string} subject - Email subject.
  * @param {string} body - Email plain text body.
  * @param {string[]} enabledCategories - Which categories to check.
- * @returns {Object} { matched: boolean, category: string, keyword: string }
+ * @return {Object} { matched: boolean, category: string, keyword: string }
  */
 function detectInvoice_(subject, body, enabledCategories) {
   const searchText = (subject + ' ' + body).toLowerCase();
-
   for (const category of enabledCategories) {
     const keywords = DETECTION_RULES[category];
     if (!keywords) continue;
-
     for (const keyword of keywords) {
       if (searchText.includes(keyword.toLowerCase())) {
         return { matched: true, category: category, keyword: keyword };
       }
     }
   }
-
   return { matched: false, category: '', keyword: '' };
 }
 
 /**
  * Extracts the highest dollar/currency amount from subject and body text.
- *
  * @param {string} subject - Email subject.
  * @param {string} body - Email plain text body (first 3000 chars used).
- * @returns {Object} { formatted: string, numeric: number }
+ * @return {Object} { formatted: string, numeric: number }
  */
 function extractAmount_(subject, body) {
-  // Only scan the first 3000 chars of body for performance
   const searchText = subject + ' ' + body.substring(0, 3000);
   let highestAmount = 0;
   let formattedAmount = '';
 
   for (const pattern of AMOUNT_PATTERNS) {
-    // Reset lastIndex for global regex
     pattern.lastIndex = 0;
     const matches = searchText.match(pattern);
     if (!matches) continue;
-
     for (const match of matches) {
-      // Strip currency symbols and parse
       const cleaned = match.replace(/[^0-9.,]/g, '').replace(/,/g, '');
       const value = parseFloat(cleaned);
       if (!isNaN(value) && value > highestAmount && value < 1000000) {
@@ -482,172 +643,82 @@ function extractAmount_(subject, body) {
     }
   }
 
-  return {
-    formatted: formattedAmount || '',
-    numeric: highestAmount,
-  };
+  return { formatted: formattedAmount || '', numeric: highestAmount };
 }
-
 
 // ═══════════════════════════════════════════
 // SHEET LOGGING
 // ═══════════════════════════════════════════
 
 /**
- * Logs a detected invoice to the branded log sheet.
- * Creates and styles the sheet if it doesn't exist.
- *
+ * Logs a detected invoice to the Expense Dashboard.
+ * Creates the dashboard if it doesn't exist.
+ * Data rows start at DASHBOARD_HEADER_ROW + 1.
  * @param {Object} item - The detected invoice data.
  */
 function logInvoice_(item) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(LOG_SHEET_NAME);
+  const sheet = getOrCreateDashboard_(ss);
 
-  if (!sheet) {
-    sheet = createLogSheet_(ss);
-  }
+  const lastRow = sheet.getLastRow();
+  const dataStartRow = DASHBOARD_HEADER_ROW + 1;
+  const newRow = Math.max(lastRow + 1, dataStartRow);
 
-  // Append the data row
-  const newRow = sheet.getLastRow() + 1;
   const rowData = [
     item.rawDate,
     item.senderEmail,
     item.subject,
-    item.amount || '—',
+    item.amount || '\u2014',
     item.amountNumeric || 0,
     item.category,
     item.matchedKeyword,
     item.messageId,
   ];
+
   sheet.getRange(newRow, 1, 1, rowData.length).setValues([rowData]);
 
-  // Apply alternating row color
-  const bgColor = (newRow % 2 === 0) ? '#F9F9F9' : '#FFFFFF';
+  // Alternating row colors
+  const bg = newRow % 2 === 0 ? BRAND.lightGray : BRAND.white;
   sheet.getRange(newRow, 1, 1, rowData.length)
-    .setBackground(bgColor)
-    .setFontFamily('Roboto')
+    .setBackground(bg)
+    .setFontFamily(BRAND.bodyFont)
     .setFontSize(10)
+    .setFontColor('#333333')
     .setVerticalAlignment('middle');
 
-  // Format the date column
-  sheet.getRange(newRow, 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  // Date format
+  sheet.getRange(newRow, COL.date).setNumberFormat('yyyy-mm-dd');
 
-  // Format the numeric amount column
-  sheet.getRange(newRow, 5).setNumberFormat('$#,##0.00');
+  // Numeric amount format
+  sheet.getRange(newRow, COL.amountNumeric).setNumberFormat('$#,##0.00');
 
-  // Apply status color to category cell
-  applyCategoryStyle_(sheet, newRow, 6, item.category);
+  // Category badge
+  applyCategoryStyle_(sheet, newRow, COL.category, item.category);
 }
 
 /**
- * Creates the branded invoice log sheet with styled headers and footer.
- *
- * @param {Spreadsheet} ss - The active spreadsheet.
- * @returns {Sheet} The created sheet.
- */
-function createLogSheet_(ss) {
-  const sheet = ss.insertSheet(LOG_SHEET_NAME);
-
-  const headers = [
-    'Date',
-    'Sender',
-    'Subject',
-    'Amount',
-    'Amount (Numeric)',
-    'Category',
-    'Matched Keyword',
-    'Message ID',
-  ];
-
-  // Write headers
-  const headerRange = sheet.getRange(1, 1, 1, headers.length);
-  headerRange.setValues([headers]);
-
-  // Style header row (brand spec)
-  headerRange
-    .setBackground('#1A1A1A')
-    .setFontColor('#C9A84C')
-    .setFontFamily('Roboto Mono')
-    .setFontWeight('bold')
-    .setFontSize(10)
-    .setHorizontalAlignment('left')
-    .setVerticalAlignment('middle');
-
-  // Set row height for header
-  sheet.setRowHeight(1, 32);
-
-  // Freeze header row
-  sheet.setFrozenRows(1);
-
-  // Set column widths
-  sheet.setColumnWidth(1, 150);  // Date
-  sheet.setColumnWidth(2, 220);  // Sender
-  sheet.setColumnWidth(3, 340);  // Subject
-  sheet.setColumnWidth(4, 110);  // Amount
-  sheet.setColumnWidth(5, 130);  // Amount (Numeric)
-  sheet.setColumnWidth(6, 150);  // Category
-  sheet.setColumnWidth(7, 150);  // Matched Keyword
-  sheet.setColumnWidth(8, 160);  // Message ID
-
-  // Hide the Message ID column (used internally for dedup display)
-  sheet.hideColumns(8);
-
-  // Add branded footer
-  addBrandedFooter_(sheet, headers.length);
-
-  // Move this sheet to position 1
-  ss.setActiveSheet(sheet);
-  ss.moveActiveSheet(1);
-
-  return sheet;
-}
-
-/**
- * Adds the "Powered by TAKScripts" footer row.
- *
- * @param {Sheet} sheet - The target sheet.
- * @param {number} numCols - Number of columns to merge.
- */
-function addBrandedFooter_(sheet, numCols) {
-  const footerRow = 2; // Will be pushed down as data is added
-  // We place a note in the sheet properties instead of a fixed row,
-  // since rows shift. Use the sheet description or a named range.
-  // For simplicity, we add it at row 1000 (far enough down).
-  const range = sheet.getRange(1000, 1, 1, numCols);
-  range.merge();
-  range.setValue('Powered by TAKScripts · takscripts.store');
-  range.setFontColor('#CCCCCC')
-    .setFontSize(9)
-    .setFontStyle('italic')
-    .setHorizontalAlignment('center')
-    .setFontFamily('Roboto');
-}
-
-/**
- * Applies a color-coded background to category cells.
- *
+ * Applies a color-coded background to a category cell.
  * @param {Sheet} sheet - The log sheet.
  * @param {number} row - Row number.
  * @param {number} col - Column number.
  * @param {string} category - The invoice category.
  */
 function applyCategoryStyle_(sheet, row, col, category) {
-  const cell = sheet.getRange(row, col);
   const styles = {
-    'Invoice':              { bg: '#FFF8E1', fg: '#F57F17' },   // Warning/amber
-    'Receipt':              { bg: '#E8F5E9', fg: '#2E7D32' },   // Success/green
-    'Payment Confirmation': { bg: '#E8F5E9', fg: '#2E7D32' },   // Success/green
-    'Order Confirmation':   { bg: '#E3F2FD', fg: '#1565C0' },   // Info/blue
-    'Subscription':         { bg: '#FFF8E1', fg: '#F57F17' },   // Warning/amber
-    'Refund':               { bg: '#FFEBEE', fg: '#C62828' },   // Error/red
+    'Invoice':              { bg: BRAND.warningBg, fg: BRAND.warningText },
+    'Receipt':              { bg: BRAND.successBg, fg: BRAND.successText },
+    'Payment Confirmation': { bg: BRAND.successBg, fg: BRAND.successText },
+    'Order Confirmation':   { bg: BRAND.infoBg,    fg: BRAND.infoText    },
+    'Subscription':         { bg: BRAND.warningBg, fg: BRAND.warningText },
+    'Refund':               { bg: BRAND.errorBg,   fg: BRAND.errorText   },
   };
-
-  const style = styles[category] || { bg: '#F5F5F5', fg: '#666666' };
-  cell.setBackground(style.bg)
+  const style = styles[category] || { bg: '#F5F5F5', fg: BRAND.medGray };
+  sheet.getRange(row, col)
+    .setBackground(style.bg)
     .setFontColor(style.fg)
-    .setFontWeight('bold');
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
 }
-
 
 // ═══════════════════════════════════════════
 // ALERT EMAILS
@@ -655,7 +726,6 @@ function applyCategoryStyle_(sheet, row, col, category) {
 
 /**
  * Sends a branded HTML alert email when an invoice exceeds the threshold.
- *
  * @param {Object} item - The detected invoice data.
  * @param {number} threshold - The configured alert threshold.
  * @param {string} alertEmail - Email address to send alert to.
@@ -663,72 +733,42 @@ function applyCategoryStyle_(sheet, row, col, category) {
 function sendThresholdAlert_(item, threshold, alertEmail) {
   if (!alertEmail) return;
 
-  const subject = '⚠️ High Invoice Alert — ' + item.amount + ' from ' + item.senderEmail;
+  const subject = '\u26A0\uFE0F High Invoice Alert \u2014 ' + item.amount + ' from ' + item.senderEmail;
 
-  const htmlBody = `
-    <div style="font-family: 'Segoe UI', system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
-      <!-- Header -->
-      <div style="background: #1A1A1A; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
-        <div style="font-size: 28px; margin-bottom: 4px;">🕷</div>
-        <div style="color: #C9A84C; font-size: 16px; font-weight: 700; letter-spacing: 1px;">TAKScripts</div>
-        <div style="color: #888; font-size: 11px; margin-top: 4px;">Email Invoice Detector · Alert</div>
-      </div>
-
-      <!-- Body -->
-      <div style="background: #FFFFFF; border: 1px solid #eee; border-top: none; padding: 24px;">
-        <h2 style="margin: 0 0 16px; font-size: 18px; color: #C62828;">
-          ⚠️ Invoice Exceeds Threshold
-        </h2>
-        <p style="font-size: 14px; color: #333; line-height: 1.6; margin: 0 0 20px;">
-          An email was detected with an amount of <strong>${item.amount}</strong>,
-          which exceeds your alert threshold of <strong>$${threshold.toFixed(2)}</strong>.
-        </p>
-
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-          <tr style="border-bottom: 1px solid #f0f0f0;">
-            <td style="padding: 10px 0; color: #888; width: 120px;">From</td>
-            <td style="padding: 10px 0; color: #333;">${item.senderEmail}</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #f0f0f0;">
-            <td style="padding: 10px 0; color: #888;">Subject</td>
-            <td style="padding: 10px 0; color: #333;">${escapeHtml_(item.subject)}</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #f0f0f0;">
-            <td style="padding: 10px 0; color: #888;">Amount</td>
-            <td style="padding: 10px 0; color: #C62828; font-weight: 700; font-size: 16px;">${item.amount}</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #f0f0f0;">
-            <td style="padding: 10px 0; color: #888;">Category</td>
-            <td style="padding: 10px 0; color: #333;">${item.category}</td>
-          </tr>
-          <tr>
-            <td style="padding: 10px 0; color: #888;">Date</td>
-            <td style="padding: 10px 0; color: #333;">${item.date}</td>
-          </tr>
-        </table>
-      </div>
-
-      <!-- Footer -->
-      <div style="background: #FAFAFA; border: 1px solid #eee; border-top: none; padding: 16px; text-align: center; border-radius: 0 0 8px 8px;">
-        <p style="font-size: 11px; color: #999; margin: 0;">
-          Sent by <strong>Email Invoice Detector</strong> via
-          <a href="https://takscripts.store" style="color: #C9A84C; text-decoration: none;">TAKScripts</a>
-        </p>
-      </div>
-    </div>
-  `;
+  const htmlBody =
+    '<div style="font-family: \'Segoe UI\', system-ui, sans-serif; max-width: 600px; margin: 0 auto;">' +
+    '<div style="background: #1A1A1A; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">' +
+    '<div style="font-size: 28px; margin-bottom: 4px;">\uD83D\uDD77</div>' +
+    '<div style="color: #C9A84C; font-size: 16px; font-weight: 700; letter-spacing: 1px;">TAKScripts</div>' +
+    '<div style="color: #888; font-size: 11px; margin-top: 4px;">Email Invoice Detector \u00B7 Alert</div>' +
+    '</div>' +
+    '<div style="background: #fff; border: 1px solid #eee; border-top: none; padding: 24px;">' +
+    '<h2 style="margin: 0 0 16px; font-size: 18px; color: #C62828;">\u26A0\uFE0F Invoice Exceeds Threshold</h2>' +
+    '<p style="font-size: 14px; color: #333; line-height: 1.6; margin: 0 0 20px;">' +
+    'An email was detected with an amount of <strong>' + escapeHtml_(item.amount) + '</strong>, ' +
+    'which exceeds your alert threshold of <strong>$' + threshold.toFixed(2) + '</strong>.' +
+    '</p>' +
+    '<table style="width: 100%; border-collapse: collapse; font-size: 13px;">' +
+    '<tr style="border-bottom: 1px solid #f0f0f0;"><td style="padding: 10px 0; color: #888; width: 120px;">From</td><td style="padding: 10px 0; color: #333;">' + escapeHtml_(item.senderEmail) + '</td></tr>' +
+    '<tr style="border-bottom: 1px solid #f0f0f0;"><td style="padding: 10px 0; color: #888;">Subject</td><td style="padding: 10px 0; color: #333;">' + escapeHtml_(item.subject) + '</td></tr>' +
+    '<tr style="border-bottom: 1px solid #f0f0f0;"><td style="padding: 10px 0; color: #888;">Amount</td><td style="padding: 10px 0; color: #C62828; font-weight: 700; font-size: 16px;">' + escapeHtml_(item.amount) + '</td></tr>' +
+    '<tr style="border-bottom: 1px solid #f0f0f0;"><td style="padding: 10px 0; color: #888;">Category</td><td style="padding: 10px 0; color: #333;">' + escapeHtml_(item.category) + '</td></tr>' +
+    '<tr><td style="padding: 10px 0; color: #888;">Date</td><td style="padding: 10px 0; color: #333;">' + escapeHtml_(item.date) + '</td></tr>' +
+    '</table></div>' +
+    '<div style="background: #FAFAFA; border: 1px solid #eee; border-top: none; padding: 16px; text-align: center; border-radius: 0 0 8px 8px;">' +
+    '<p style="font-size: 11px; color: #999; margin: 0;">Sent by <strong>Email Invoice Detector</strong> via ' +
+    '<a href="https://takscripts.store" style="color: #C9A84C; text-decoration: none;">TAKScripts</a></p>' +
+    '</div></div>';
 
   try {
     GmailApp.sendEmail(alertEmail, subject,
       'High Invoice Alert: ' + item.amount + ' from ' + item.senderEmail,
       { htmlBody: htmlBody }
     );
-    Logger.log('Alert sent to ' + alertEmail + ' for amount ' + item.amount);
   } catch (e) {
     Logger.log('Failed to send alert email: ' + e.message);
   }
 }
-
 
 // ═══════════════════════════════════════════
 // HELPERS
@@ -736,10 +776,9 @@ function sendThresholdAlert_(item, threshold, alertEmail) {
 
 /**
  * Extracts the email address from a "From" header field.
- * Handles formats like: "John Doe <john@example.com>" or "john@example.com"
- *
+ * Handles: "John Doe <john@example.com>" or "john@example.com"
  * @param {string} fromField - The raw From header value.
- * @returns {string} The extracted email address.
+ * @return {string} The extracted email address.
  */
 function extractEmail_(fromField) {
   const match = fromField.match(/<(.+?)>/);
@@ -748,26 +787,25 @@ function extractEmail_(fromField) {
 
 /**
  * Formats a Date object to a human-readable string.
- *
  * @param {Date} date - The date to format.
- * @returns {string} Formatted date string (e.g., "March 15, 2026").
+ * @return {string} Formatted date string (e.g., "March 15, 2026").
  */
 function formatDate_(date) {
   const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January','February','March','April','May','June',
+    'July','August','September','October','November','December',
   ];
   return months[date.getMonth()] + ' ' + date.getDate() + ', ' + date.getFullYear();
 }
 
 /**
- * Escapes HTML special characters to prevent XSS in alert emails.
- *
+ * Escapes HTML special characters to prevent injection in alert emails.
  * @param {string} str - The raw string.
- * @returns {string} The escaped string.
+ * @return {string} The escaped string.
  */
 function escapeHtml_(str) {
-  return str
+  if (!str) return '';
+  return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -776,14 +814,13 @@ function escapeHtml_(str) {
 }
 
 /**
- * Resets the processed message IDs. Use if you want to re-scan old emails.
+ * Resets processed message IDs. Use to re-scan old emails.
  * Available from Script Editor only (not in the menu for safety).
  */
 function resetProcessedIds() {
   PropertiesService.getScriptProperties().deleteProperty(PROP_PROCESSED);
-  Logger.log('Processed message IDs cleared. Next scan will re-process all emails.');
+  Logger.log('Processed IDs cleared. Next scan will re-process all emails.');
 }
-
 
 // ═══════════════════════════════════════════
 // SETTINGS SIDEBAR HTML
@@ -791,14 +828,13 @@ function resetProcessedIds() {
 
 /**
  * Returns the full HTML for the branded settings sidebar.
- * Follows TAKScripts design guide: dark header, gold accents,
- * white body, rounded inputs with gold focus states.
- *
- * @returns {string} Complete HTML string.
+ * @return {string} Complete HTML string.
  */
 function getSettingsHtml_() {
   const categoryOptions = Object.keys(DETECTION_RULES)
-    .map(cat => `<label class="checkbox-row"><input type="checkbox" value="${cat}" checked /><span>${cat}</span></label>`)
+    .map(function(cat) {
+      return '<label class="checkbox-row"><input type="checkbox" value="' + cat + '" checked /><span>' + cat + '</span></label>';
+    })
     .join('');
 
   return `<!DOCTYPE html>
@@ -812,8 +848,6 @@ function getSettingsHtml_() {
       color: #1A1A1A;
       font-size: 13px;
     }
-
-    /* ── Header ────────────────────────── */
     .header {
       background: #1A1A1A;
       color: white;
@@ -824,8 +858,6 @@ function getSettingsHtml_() {
     .header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; }
     .header .brand { color: #C9A84C; }
     .header .sub { font-size: 11px; color: #888; margin-top: 4px; }
-
-    /* ── Form ──────────────────────────── */
     .form { padding: 16px; }
     .section-title {
       font-size: 11px;
@@ -866,183 +898,81 @@ function getSettingsHtml_() {
       border-color: #C9A84C;
       box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
     }
-    .field .help {
-      font-size: 11px;
-      color: #999;
-      margin-top: 4px;
-      line-height: 1.4;
-    }
-
-    /* ── Inline fields ────────────────── */
-    .inline-fields {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    /* ── Toggle ────────────────────────── */
+    .field .help { font-size: 11px; color: #999; margin-top: 4px; line-height: 1.4; }
+    .inline-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .toggle-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 10px 0;
     }
-    .toggle-label {
-      font-size: 13px;
-      color: #333;
-    }
-    .toggle-label .sublabel {
-      display: block;
-      font-size: 11px;
-      color: #999;
-      margin-top: 2px;
-    }
-    .toggle {
-      position: relative;
-      width: 40px;
-      height: 22px;
-      flex-shrink: 0;
-      margin-left: 12px;
-    }
-    .toggle input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
+    .toggle-label { font-size: 13px; color: #333; }
+    .toggle-label .sublabel { display: block; font-size: 11px; color: #999; margin-top: 2px; }
+    .toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; margin-left: 12px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
     .toggle .slider {
-      position: absolute;
-      inset: 0;
-      background: #ccc;
-      border-radius: 22px;
-      cursor: pointer;
-      transition: background 0.2s;
+      position: absolute; inset: 0;
+      background: #ccc; border-radius: 22px; cursor: pointer; transition: background 0.2s;
     }
     .toggle .slider::before {
-      content: '';
-      position: absolute;
-      height: 16px;
-      width: 16px;
-      left: 3px;
-      bottom: 3px;
-      background: white;
-      border-radius: 50%;
-      transition: transform 0.2s;
+      content: ''; position: absolute;
+      height: 16px; width: 16px; left: 3px; bottom: 3px;
+      background: white; border-radius: 50%; transition: transform 0.2s;
     }
-    .toggle input:checked + .slider {
-      background: #C9A84C;
-    }
-    .toggle input:checked + .slider::before {
-      transform: translateX(18px);
-    }
-
-    /* ── Checkboxes ────────────────────── */
-    .checkbox-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
-    }
+    .toggle input:checked + .slider { background: #C9A84C; }
+    .toggle input:checked + .slider::before { transform: translateX(18px); }
+    .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .checkbox-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: #444;
-      cursor: pointer;
-      padding: 4px 0;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: #444; cursor: pointer; padding: 4px 0;
     }
-    .checkbox-row input[type="checkbox"] {
-      accent-color: #C9A84C;
-      width: 14px;
-      height: 14px;
-    }
-
-    /* ── Buttons ───────────────────────── */
+    .checkbox-row input[type="checkbox"] { accent-color: #C9A84C; width: 14px; height: 14px; }
     .btn {
-      width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      letter-spacing: 0.5px;
+      width: 100%; padding: 12px; border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px;
     }
-    .btn-primary {
-      background: #1A1A1A;
-      color: #C9A84C;
-      border: 1px solid #C9A84C;
-    }
-    .btn-primary:hover {
-      background: #C9A84C;
-      color: #1A1A1A;
-    }
-    .btn-secondary {
-      background: white;
-      color: #666;
-      border: 1px solid #ddd;
-      margin-top: 8px;
-    }
-    .btn-secondary:hover {
-      border-color: #999;
-      color: #333;
-    }
-
-    /* ── Status ────────────────────────── */
+    .btn-primary { background: #1A1A1A; color: #C9A84C; border: 1px solid #C9A84C; }
+    .btn-primary:hover { background: #C9A84C; color: #1A1A1A; }
+    .btn-secondary { background: white; color: #666; border: 1px solid #ddd; margin-top: 8px; }
+    .btn-secondary:hover { border-color: #999; color: #333; }
     .status {
-      text-align: center;
-      padding: 8px;
-      font-size: 12px;
-      margin-top: 8px;
-      border-radius: 6px;
-      display: none;
+      text-align: center; padding: 8px; font-size: 12px;
+      margin-top: 8px; border-radius: 6px; display: none;
     }
-    .status.success { display: block; background: #E8F5E9; color: #2E7D32; }
-    .status.error   { display: block; background: #FFEBEE; color: #C62828; }
-
-    .divider { border-top: 1px solid #eee; margin: 20px 0; }
+    .status.success { display: block; background: #e8f5e9; color: #2e7d32; }
+    .status.error { display: block; background: #ffebee; color: #c62828; }
   </style>
 </head>
 <body>
-  <!-- ── Header ─────────────────────── -->
   <div class="header">
-    <div class="logo">🕷</div>
+    <div class="logo">\uD83D\uDD77</div>
     <h1><span class="brand">TAK</span>Scripts</h1>
-    <div class="sub">Email Invoice Detector · Settings</div>
+    <div class="sub">Email Invoice Detector \u00B7 Settings</div>
   </div>
 
   <div class="form">
 
-    <!-- ── Scan Settings ──────────────── -->
     <div class="section-title">Scan Settings</div>
 
     <div class="field">
       <label>Gmail Label (optional)</label>
-      <input type="text" id="scanLabel" placeholder="Leave empty to scan Inbox" />
-      <div class="help">Only scan emails with this label. Leave empty to scan your entire inbox.</div>
+      <input type="text" id="scanLabel" placeholder="e.g. invoices (leave blank for inbox)" />
+      <div class="help">Only scan emails with this label. Leave blank to scan your full inbox.</div>
     </div>
 
     <div class="inline-fields">
       <div class="field">
-        <label>Lookback (days)</label>
-        <select id="scanAge">
-          <option value="1">1 day</option>
-          <option value="3">3 days</option>
-          <option value="7" selected>7 days</option>
-          <option value="14">14 days</option>
-          <option value="30">30 days</option>
-        </select>
+        <label>Scan Last N Days</label>
+        <input type="number" id="scanAge" min="1" max="365" placeholder="7" />
       </div>
       <div class="field">
-        <label>Scan Frequency</label>
+        <label>Run Every (min)</label>
         <select id="frequency">
-          <option value="5">Every 5 min</option>
-          <option value="15">Every 15 min</option>
-          <option value="30">Every 30 min</option>
-          <option value="60" selected>Every hour</option>
-          <option value="360">Every 6 hours</option>
-          <option value="720">Every 12 hours</option>
-          <option value="1440">Once a day</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60" selected>1 hour</option>
+          <option value="360">6 hours</option>
+          <option value="1440">Daily</option>
         </select>
       </div>
     </div>
@@ -1050,48 +980,46 @@ function getSettingsHtml_() {
     <div class="toggle-row">
       <div class="toggle-label">
         Auto-scan on schedule
-        <span class="sublabel">Creates a time-driven trigger</span>
+        <span class="sublabel">Runs automatically in the background</span>
       </div>
-      <label class="toggle">
+      <div class="toggle">
         <input type="checkbox" id="enableAutoTrigger" />
         <span class="slider"></span>
-      </label>
+      </div>
     </div>
 
-    <!-- ── Categories ─────────────────── -->
-    <div class="section-title">Detection Categories</div>
-
-    <div class="checkbox-grid" id="categoryGrid">
-      ${categoryOptions}
-    </div>
-
-    <!-- ── Alerts ─────────────────────── -->
     <div class="section-title">Amount Alerts</div>
 
     <div class="toggle-row">
       <div class="toggle-label">
-        High-amount email alerts
-        <span class="sublabel">Get notified for large invoices</span>
+        Alert me on large invoices
+        <span class="sublabel">Sends you an email above the threshold</span>
       </div>
-      <label class="toggle">
+      <div class="toggle">
         <input type="checkbox" id="enableAlerts" />
         <span class="slider"></span>
-      </label>
+      </div>
     </div>
 
     <div class="inline-fields">
       <div class="field">
-        <label>Threshold ($)</label>
-        <input type="number" id="alertThreshold" placeholder="500" min="0" step="50" />
+        <label>Alert Threshold ($)</label>
+        <input type="number" id="alertThreshold" min="0" placeholder="500" />
       </div>
       <div class="field">
         <label>Alert Email</label>
-        <input type="email" id="alertEmail" placeholder="you@example.com" />
+        <input type="email" id="alertEmail" placeholder="you@email.com" />
       </div>
     </div>
 
-    <!-- ── Actions ─────────────────────── -->
-    <div class="divider"></div>
+    <div class="section-title">Categories to Detect</div>
+
+    <div class="field">
+      <div class="checkbox-grid">
+        ${categoryOptions}
+      </div>
+      <div class="help" style="margin-top: 8px;">Uncheck categories you don't want to track.</div>
+    </div>
 
     <button class="btn btn-primary" onclick="save()">Save Settings</button>
     <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>
@@ -1100,59 +1028,49 @@ function getSettingsHtml_() {
   </div>
 
   <script>
-    /**
-     * Load saved settings on sidebar open.
-     */
     google.script.run.withSuccessHandler(function(s) {
       document.getElementById('scanLabel').value = s.scanLabel || '';
-      document.getElementById('scanAge').value = s.scanAge || '7';
+      document.getElementById('scanAge').value = s.scanAge || 7;
       document.getElementById('frequency').value = s.frequency || '60';
-      document.getElementById('enableAutoTrigger').checked = s.enableAutoTrigger === true || s.enableAutoTrigger === 'true';
-      document.getElementById('enableAlerts').checked = s.enableAlerts === true || s.enableAlerts === 'true';
-      document.getElementById('alertThreshold').value = s.alertThreshold || '500';
+      document.getElementById('enableAutoTrigger').checked = s.enableAutoTrigger || false;
+      document.getElementById('enableAlerts').checked = s.enableAlerts || false;
+      document.getElementById('alertThreshold').value = s.alertThreshold || 500;
       document.getElementById('alertEmail').value = s.alertEmail || '';
 
       // Restore category checkboxes
-      if (s.categories) {
-        var enabled = s.categories.split(',').map(function(c) { return c.trim(); });
-        var boxes = document.querySelectorAll('#categoryGrid input[type="checkbox"]');
-        boxes.forEach(function(box) {
-          box.checked = enabled.indexOf(box.value) !== -1;
-        });
-      }
+      var enabled = (s.categories || '').split(',').map(function(c) { return c.trim(); });
+      document.querySelectorAll('.checkbox-row input[type="checkbox"]').forEach(function(cb) {
+        cb.checked = enabled.includes(cb.value);
+      });
     }).loadSettings();
 
-    /**
-     * Collect form values and save via server call.
-     */
     function save() {
-      // Gather enabled categories
-      var boxes = document.querySelectorAll('#categoryGrid input[type="checkbox"]');
-      var cats = [];
-      boxes.forEach(function(box) { if (box.checked) cats.push(box.value); });
+      var checkedCats = [];
+      document.querySelectorAll('.checkbox-row input[type="checkbox"]:checked').forEach(function(cb) {
+        checkedCats.push(cb.value);
+      });
 
       var settings = {
         scanLabel: document.getElementById('scanLabel').value.trim(),
-        scanAge: document.getElementById('scanAge').value,
+        scanAge: document.getElementById('scanAge').value || '7',
         frequency: document.getElementById('frequency').value,
         enableAutoTrigger: document.getElementById('enableAutoTrigger').checked,
         enableAlerts: document.getElementById('enableAlerts').checked,
-        alertThreshold: document.getElementById('alertThreshold').value,
+        alertThreshold: document.getElementById('alertThreshold').value || '500',
         alertEmail: document.getElementById('alertEmail').value.trim(),
-        categories: cats.join(', '),
+        categories: checkedCats.join(', '),
       };
 
       var statusEl = document.getElementById('status');
-      statusEl.className = 'status';
       statusEl.style.display = 'none';
 
       google.script.run
         .withSuccessHandler(function() {
-          statusEl.textContent = '✓ Settings saved successfully';
+          statusEl.textContent = '\u2713 Settings saved successfully';
           statusEl.className = 'status success';
         })
         .withFailureHandler(function(err) {
-          statusEl.textContent = '✕ Error: ' + err.message;
+          statusEl.textContent = '\u2715 Error: ' + err.message;
           statusEl.className = 'status error';
         })
         .saveSettings(settings);
