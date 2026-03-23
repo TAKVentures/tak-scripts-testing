@@ -497,7 +497,11 @@ function testRun() {
     }
   }
 
-  SpreadsheetApp.getUi().alert(lines.join('\n'));
+  try {
+    SpreadsheetApp.getUi().alert(lines.join('\n'));
+  } catch (e) {
+    Logger.log('Scan finished. Detected: ' + results.items.length);
+  }
 }
 
 /**
