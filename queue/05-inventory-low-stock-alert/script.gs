@@ -131,11 +131,15 @@ function saveSettings(settings) {
   var props = PropertiesService.getScriptProperties();
   props.setProperty('inv_settings', JSON.stringify(settings));
 
-  removeTriggers_('scheduledStockCheck');
-  if (settings.frequency === 'hourly') {
-    ScriptApp.newTrigger('scheduledStockCheck').timeBased().everyHours(1).create();
-  } else if (settings.frequency === 'daily') {
-    ScriptApp.newTrigger('scheduledStockCheck').timeBased().everyDays(1).atHour(8).create();
+  try {
+    removeTriggers_('scheduledStockCheck');
+    if (settings.frequency === 'hourly') {
+      ScriptApp.newTrigger('scheduledStockCheck').timeBased().everyHours(1).create();
+    } else if (settings.frequency === 'daily') {
+      ScriptApp.newTrigger('scheduledStockCheck').timeBased().everyDays(1).atHour(8).create();
+    }
+  } catch (e) {
+    Logger.log('Trigger update skipped: ' + e.message);
   }
 
   return { success: true };

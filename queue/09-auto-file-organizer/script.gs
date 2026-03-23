@@ -216,11 +216,14 @@ function saveSettings(settings) {
   var props = PropertiesService.getScriptProperties();
   props.setProperty('afo_settings', JSON.stringify(settings));
 
-  // Manage schedule trigger based on settings
-  if (settings.scheduleEnabled) {
-    createScheduleTrigger_(settings.scheduleFrequency);
-  } else {
-    removeScheduleTrigger_();
+  try {
+    if (settings.scheduleEnabled) {
+      createScheduleTrigger_(settings.scheduleFrequency);
+    } else {
+      removeScheduleTrigger_();
+    }
+  } catch (e) {
+    Logger.log('Trigger update skipped: ' + e.message);
   }
 
   return { success: true };
