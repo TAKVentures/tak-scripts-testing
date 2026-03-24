@@ -68,7 +68,7 @@ function onOpen() {
 function showSettings() {
   const html = HtmlService.createHtmlOutput(getSettingsHtml())
     .setTitle('VIP Priority Alert — Settings')
-    .setWidth(380);
+    .setWidth(430);
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
@@ -76,6 +76,7 @@ function viewDashboard() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME) || getOrCreateDashboard_();
   ss.setActiveSheet(sheet);
+  refreshDashboardStats();
 }
 
 function showAbout() {
@@ -119,6 +120,8 @@ function getDefaultSettings_() {
     quietStart: '22:00',
     quietEnd: '07:00',
     quietEnabled: false,
+    lookbackCount: 50,
+    excludeDomains: 'noreply, no-reply, mailer-daemon, notifications',
   };
 }
 
@@ -318,6 +321,13 @@ function refreshDashboardStats() {
     today || '—',
     vips.length || '—',
   ]]);
+
+  var lastRunRaw = PropertiesService.getScriptProperties().getProperty('vip_last_run');
+  if (lastRunRaw) {
+    var lastRun = Utilities.formatDate(new Date(lastRunRaw), Session.getScriptTimeZone(), 'MMM d, h:mm a');
+    sheet.getRange(1, 6).setValue(lastRun);
+    sheet.getRange(2, 6).setValue('LAST RUN');
+  }
 }
 
 
@@ -349,7 +359,7 @@ function checkForVIPEmails() {
     .map(k => k.trim().toLowerCase())
     .filter(Boolean);
 
-  const threads = GmailApp.search('is:unread is:inbox newer_than:1d', 0, 50);
+  const threads = GmailApp.search('is:unread is:inbox newer_than:1d', 0, settings.lookbackCount || 50);
   let alertCount = 0;
   const newProcessed = [];
 
@@ -360,14 +370,19 @@ function checkForVIPEmails() {
 
     if (processed.has(msgId)) continue;
 
-    const senderEmail = extractEmail_(msg.getFrom());
-    const senderName = extractName_(msg.getFrom());
+    const rawFrom = msg.getFrom();
+    const rawFromLower = rawFrom.toLowerCase();
+    const senderEmail = extractEmail_(rawFromLower);
+    const senderName = extractName_(rawFromLower);
     const subject = msg.getSubject() || '(no subject)';
     const snippet = msg.getPlainBody().substring(0, 200).replace(/\n/g, ' ').trim();
 
     const vipMatch = vips.find(v => v.email === senderEmail);
     const subjectLower = subject.toLowerCase();
-    const keywordHit = keywords.find(kw => subjectLower.includes(kw));
+    const senderDomain = senderEmail.split('@')[1] || '';
+    const excludeList = (settings.excludeDomains || '').split(',').map(function(d) { return d.trim().toLowerCase(); });
+    const isDomainExcluded = excludeList.some(function(d) { return d && senderDomain.indexOf(d) !== -1; });
+    const keywordHit = isDomainExcluded ? null : keywords.find(kw => subjectLower.includes(kw));
 
     if (!vipMatch && !keywordHit) continue;
 
@@ -395,6 +410,7 @@ function checkForVIPEmails() {
 
   const allProcessed = [...processedArr, ...newProcessed].slice(-500);
   props.setProperty(PROP_PROCESSED, JSON.stringify(allProcessed));
+  PropertiesService.getScriptProperties().setProperty('vip_last_run', new Date().toISOString());
 
   Logger.log('Done. Triggered ' + alertCount + ' VIP alerts.');
 }
@@ -415,9 +431,13 @@ function getVIPList_() {
   const data = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
   const vips = [];
 
-  for (const row of data) {
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
     const email = (row[1] || '').toString().trim().toLowerCase();
-    if (!email || !email.includes('@')) continue;
+    if (!email || !email.includes('@')) {
+      console.log('VIP list: skipping row ' + (i + 2) + ' — invalid or missing email: "' + (row[1] || '') + '"');
+      continue;
+    }
 
     vips.push({
       name: (row[0] || '').toString().trim(),
@@ -597,6 +617,14 @@ function startMonitoring() {
 
   stopMonitoring_(false);
 
+  // Remove any existing triggers for this function first
+  var existing = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < existing.length; i++) {
+    if (existing[i].getHandlerFunction() === TRIGGER_FN) {
+      ScriptApp.deleteTrigger(existing[i]);
+    }
+  }
+
   const freq = parseInt(settings.checkFrequency, 10) || 5;
 
   ScriptApp.newTrigger(TRIGGER_FN)
@@ -671,8 +699,10 @@ function testRun() {
   for (const thread of threads) {
     const messages = thread.getMessages();
     const msg = messages[messages.length - 1];
-    const senderEmail = extractEmail_(msg.getFrom());
-    const senderName = extractName_(msg.getFrom());
+    const rawFrom = msg.getFrom();
+    const rawFromLower = rawFrom.toLowerCase();
+    const senderEmail = extractEmail_(rawFromLower);
+    const senderName = extractName_(rawFromLower);
     const subject = msg.getSubject() || '(no subject)';
 
     const vipMatch = vips.find(v => v.email === senderEmail);
@@ -707,10 +737,30 @@ function testRun() {
   const output = results.join('\n');
   Logger.log(output);
   try {
-    SpreadsheetApp.getUi().alert(output);
+    showTestResultsSidebar_(output);
   } catch(e) {
-    Logger.log(output);
+    Logger.log('Sidebar display skipped: ' + e.message);
   }
+}
+
+function showTestResultsSidebar_(output) {
+  var escaped = output
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+  var html = '<!DOCTYPE html><html><head><style>' +
+    '* { box-sizing: border-box; margin: 0; padding: 0; }' +
+    'body { font-family: Roboto, Arial, sans-serif; font-size: 12px; color: #333; background: #f9f9f9; }' +
+    '.header { background: #1A1A1A; color: white; padding: 16px; text-align: center; }' +
+    '.header h2 { font-size: 14px; font-weight: 600; color: #C9A84C; }' +
+    '.content { padding: 16px; line-height: 1.7; }' +
+    '</style></head><body>' +
+    '<div class="header"><h2>🧪 Test Run Results</h2></div>' +
+    '<div class="content">' + escaped + '</div>' +
+    '</body></html>';
+  var panel = HtmlService.createHtmlOutput(html).setTitle('Test Run Results').setWidth(420);
+  SpreadsheetApp.getUi().showSidebar(panel);
 }
 
 /**
@@ -810,12 +860,24 @@ function getSettingsHtml() {
       <div class="help">Where to send VIP alert notifications.</div>
     </div>
 
+    <div class="field">
+      <label>Threads to Scan</label>
+      <input type="number" id="lookbackCount" min="10" max="500" value="50" />
+      <div class="help">Number of recent email threads to check on each run</div>
+    </div>
+
     <div class="section-title">Keyword Triggers</div>
 
     <div class="field">
       <label>Subject Keywords</label>
       <textarea id="keywords" placeholder="urgent, asap, time-sensitive"></textarea>
       <div class="help">Comma-separated. Emails with these words in the subject will trigger an alert regardless of sender.</div>
+    </div>
+
+    <div class="field">
+      <label>Exclude Domains (keyword alerts only)</label>
+      <textarea id="excludeDomains" rows="2" placeholder="noreply, no-reply, mailer-daemon"></textarea>
+      <div class="help">Comma-separated. Emails from these domains won't trigger keyword alerts (VIP sender alerts still apply).</div>
     </div>
 
     <div class="section-title">Quiet Hours</div>
@@ -856,6 +918,8 @@ function getSettingsHtml() {
       document.getElementById('quietStart').value = s.quietStart || '22:00';
       document.getElementById('quietEnd').value = s.quietEnd || '07:00';
       document.getElementById('quietEnabled').checked = !!s.quietEnabled;
+      document.getElementById('lookbackCount').value = s.lookbackCount || 50;
+      document.getElementById('excludeDomains').value = s.excludeDomains || '';
     }).loadSettings();
 
     function save() {
@@ -866,6 +930,8 @@ function getSettingsHtml() {
         quietStart: document.getElementById('quietStart').value,
         quietEnd: document.getElementById('quietEnd').value,
         quietEnabled: document.getElementById('quietEnabled').checked,
+        lookbackCount: parseInt(document.getElementById('lookbackCount').value, 10) || 50,
+        excludeDomains: document.getElementById('excludeDomains').value,
       };
 
       const freq = parseInt(settings.checkFrequency, 10);
