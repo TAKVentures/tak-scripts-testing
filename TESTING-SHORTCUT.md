@@ -20,7 +20,7 @@ Skip any folder that already has a test-report.md file (already tested).
 
 STEP 3 — FOR EACH SCRIPT IN THE QUEUE:
 
-a) Read the test-plan.md in that script's folder for test instructions
+a) Read the TEST.md in that script's folder for test instructions
 b) Read the script.gs file and copy ALL of the code
 
 c) Go to the dedicated testing spreadsheet:
@@ -107,7 +107,9 @@ After testing ALL scripts, write a summary comment:
 
 IMPORTANT RULES:
 - Never modify the script code — only test and report
-- Test EVERY step in the test plan, don't skip any
+- Test EVERY step in the TEST.md, don't skip any
+- ALWAYS follow the TEST.md steps in order — do NOT run functions from the Apps Script editor. The editor is only used once to paste and save the code. Everything after that is done through the TAKScripts menu in the spreadsheet.
+- Always configure Settings (step in TEST.md) BEFORE running any main action or test run
 - Always use the SAME Apps Script project and spreadsheet (links above) — never create new ones
 - Always check design quality against the Design Guide
 - Be specific in your feedback — include exact colors, sizes, and suggestions
