@@ -59,6 +59,7 @@ function onOpen() {
     .addItem('⚙️ Cleanup Settings', 'showSidebar')
     .addItem('↩️ Undo (Restore Backup)', 'undoFromBackup')
     .addSeparator()
+    .addItem('❓ How to Use', 'showHelp')
     .addItem('ℹ️ About TAKScripts', 'showAbout')
     .addToUi();
 }
@@ -1536,4 +1537,56 @@ function getSidebarHtml() {
   </script>\
 </body>\
 </html>';
+}
+
+function showHelp() {
+  var html = HtmlService.createHtmlOutput(getHelpHtml_())
+    .setTitle('How to Use')
+    .setWidth(350);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function getHelpHtml_() {
+  return '<!DOCTYPE html>' +
+  '<html><head><style>' +
+  '* { box-sizing: border-box; margin: 0; padding: 0; }' +
+  'body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #333; background: #f9f9f9; }' +
+  '.header { background: #1A1A1A; color: white; padding: 20px 16px 16px; text-align: center; }' +
+  '.header .icon { font-size: 28px; margin-bottom: 6px; }' +
+  '.header h2 { font-size: 15px; font-weight: 600; color: #C9A84C; margin-bottom: 2px; }' +
+  '.header p { font-size: 11px; color: #888; }' +
+  '.content { padding: 16px; }' +
+  '.section { margin-bottom: 20px; }' +
+  '.section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #C9A84C; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; }' +
+  'ol, ul { padding-left: 18px; }' +
+  'li { margin-bottom: 7px; line-height: 1.4; color: #444; font-size: 12px; }' +
+  '.setting { margin-bottom: 10px; }' +
+  '.setting strong { display: block; font-size: 12px; color: #1A1A1A; margin-bottom: 2px; }' +
+  '.setting span { font-size: 11px; color: #666; line-height: 1.4; display: block; }' +
+  '.tip { background: #FFF8E7; border-left: 3px solid #C9A84C; padding: 8px 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0; font-size: 12px; color: #555; line-height: 1.4; }' +
+  '.footer { text-align: center; padding: 12px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; }' +
+  '</style></head><body>' +
+  '<div class="header"><div class="icon">🕷</div>' +
+  '<h2>Data Cleanup Wizard</h2><p>Quick Reference Guide</p></div>' +
+  '<div class="content">' +
+  '<div class="section"><h3>Quick Start</h3><ol>' +
+  '<li>Click on the sheet tab you want to clean, or select a specific range</li>' +
+  '<li>Click <strong>▶️ Preview Cleanup</strong> to see exactly what would change — no data is touched yet</li>' +
+  '<li>Review the preview, then choose your cleanup operations</li>' +
+  '<li>Click <strong>Run Cleanup</strong> to apply the changes</li>' +
+  '<li>The dashboard logs every run with a count of changes made</li>' +
+  '</ol></div>' +
+  '<div class="section"><h3>Cleanup Operations</h3>' +
+  '<div class="setting"><strong>Trim Whitespace</strong><span>Removes leading and trailing spaces from every cell. Fixes copy-paste issues.</span></div>' +
+  '<div class="setting"><strong>Fix Text Case</strong><span>Converts text to Title Case, UPPER, lower, or Sentence case consistently</span></div>' +
+  '<div class="setting"><strong>Remove Duplicates</strong><span>Finds and removes duplicate rows based on a column you choose</span></div>' +
+  '<div class="setting"><strong>Remove Blank Rows</strong><span>Deletes completely empty rows from your data range</span></div>' +
+  '</div>' +
+  '<div class="section"><h3>Tips</h3>' +
+  '<div class="tip">Always <strong>Preview first</strong> — see the exact changes before committing anything</div>' +
+  '<div class="tip">Enable <strong>Backup Before Cleaning</strong> in settings for a safety net on important data</div>' +
+  '<div class="tip">Use <strong>Undo</strong> from the menu to restore from the last backup if something looks wrong</div>' +
+  '</div></div>' +
+  '<div class="footer">TAKScripts · takscripts.store</div>' +
+  '</body></html>';
 }

@@ -92,6 +92,7 @@ function onOpen() {
     .addItem('📊 View Dashboard', 'viewDashboard')
     .addItem('🔄 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
+    .addItem('❓ How to Use', 'showHelp')
     .addItem('ℹ️ About TAKScripts', 'showAbout')
     .addToUi();
 }
@@ -1543,4 +1544,58 @@ function getSettingsHtml() {
 '  </script>\n' +
 '</body>\n' +
 '</html>';
+}
+
+function showHelp() {
+  var html = HtmlService.createHtmlOutput(getHelpHtml_())
+    .setTitle('How to Use')
+    .setWidth(350);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function getHelpHtml_() {
+  return '<!DOCTYPE html>' +
+  '<html><head><style>' +
+  '* { box-sizing: border-box; margin: 0; padding: 0; }' +
+  'body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #333; background: #f9f9f9; }' +
+  '.header { background: #1A1A1A; color: white; padding: 20px 16px 16px; text-align: center; }' +
+  '.header .icon { font-size: 28px; margin-bottom: 6px; }' +
+  '.header h2 { font-size: 15px; font-weight: 600; color: #C9A84C; margin-bottom: 2px; }' +
+  '.header p { font-size: 11px; color: #888; }' +
+  '.content { padding: 16px; }' +
+  '.section { margin-bottom: 20px; }' +
+  '.section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #C9A84C; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; }' +
+  'ol, ul { padding-left: 18px; }' +
+  'li { margin-bottom: 7px; line-height: 1.4; color: #444; font-size: 12px; }' +
+  '.setting { margin-bottom: 10px; }' +
+  '.setting strong { display: block; font-size: 12px; color: #1A1A1A; margin-bottom: 2px; }' +
+  '.setting span { font-size: 11px; color: #666; line-height: 1.4; display: block; }' +
+  '.tip { background: #FFF8E7; border-left: 3px solid #C9A84C; padding: 8px 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0; font-size: 12px; color: #555; line-height: 1.4; }' +
+  '.footer { text-align: center; padding: 12px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; }' +
+  '</style></head><body>' +
+  '<div class="header"><div class="icon">🕷</div>' +
+  '<h2>Attachment Auto-Saver</h2><p>Quick Reference Guide</p></div>' +
+  '<div class="content">' +
+  '<div class="section"><h3>Quick Start</h3><ol>' +
+  '<li>Open <strong>⚙️ Settings</strong> — optionally add specific senders to filter by</li>' +
+  '<li>Choose how to organize your Drive folders: by sender, date, or file type</li>' +
+  '<li>Click <strong>▶️ Save Attachments Now</strong> to run your first save</li>' +
+  '<li>All saved files appear in the dashboard with clickable Drive links</li>' +
+  '<li>Enable auto-schedule to run in the background automatically</li>' +
+  '</ol></div>' +
+  '<div class="section"><h3>Settings Guide</h3>' +
+  '<div class="setting"><strong>Senders</strong><span>Only save attachments from these email addresses. Comma-separated. Leave blank to save from everyone.</span></div>' +
+  '<div class="setting"><strong>Gmail Label</strong><span>Limit saving to emails with a specific Gmail label</span></div>' +
+  '<div class="setting"><strong>Organize Folders By</strong><span>Sender creates one folder per sender. Date creates year/month folders. File Type creates folders like PDFs, Images.</span></div>' +
+  '<div class="setting"><strong>File Types</strong><span>Only save specific file types — e.g. check only PDFs to ignore everything else</span></div>' +
+  '<div class="setting"><strong>Skip Inline Images</strong><span>Keep this ON — it blocks email signatures, logos, and tracking pixels from being saved</span></div>' +
+  '<div class="setting"><strong>Auto-Schedule</strong><span>Hourly or daily saves that run automatically in the background</span></div>' +
+  '</div>' +
+  '<div class="section"><h3>Tips</h3>' +
+  '<div class="tip">Use <strong>Test Run</strong> first to preview what would be saved without saving anything</div>' +
+  '<div class="tip">The script <strong>never saves the same attachment twice</strong> — re-running is always safe</div>' +
+  '<div class="tip"><strong>By Sender</strong> organization makes it easy to find files from specific clients later</div>' +
+  '</div></div>' +
+  '<div class="footer">TAKScripts · takscripts.store</div>' +
+  '</body></html>';
 }

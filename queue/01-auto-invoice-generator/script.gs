@@ -89,6 +89,8 @@ function onOpen() {
     .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
     .addItem('\uD83E\uDDEA Test Run', 'testRun')
+    .addSeparator()
+    .addItem('\u2753 How to Use', 'showHelp')
     .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
     .addToUi();
 }
@@ -1613,4 +1615,57 @@ function getSettingsHtml() {
   </script>
 </body>
 </html>`;
+}
+
+function showHelp() {
+  var html = HtmlService.createHtmlOutput(getHelpHtml_())
+    .setTitle('How to Use')
+    .setWidth(350);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function getHelpHtml_() {
+  return '<!DOCTYPE html>' +
+  '<html><head><style>' +
+  '* { box-sizing: border-box; margin: 0; padding: 0; }' +
+  'body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #333; background: #f9f9f9; }' +
+  '.header { background: #1A1A1A; color: white; padding: 20px 16px 16px; text-align: center; }' +
+  '.header .icon { font-size: 28px; margin-bottom: 6px; }' +
+  '.header h2 { font-size: 15px; font-weight: 600; color: #C9A84C; margin-bottom: 2px; }' +
+  '.header p { font-size: 11px; color: #888; }' +
+  '.content { padding: 16px; }' +
+  '.section { margin-bottom: 20px; }' +
+  '.section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #C9A84C; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; }' +
+  'ol, ul { padding-left: 18px; }' +
+  'li { margin-bottom: 7px; line-height: 1.4; color: #444; font-size: 12px; }' +
+  '.setting { margin-bottom: 10px; }' +
+  '.setting strong { display: block; font-size: 12px; color: #1A1A1A; margin-bottom: 2px; }' +
+  '.setting span { font-size: 11px; color: #666; line-height: 1.4; display: block; }' +
+  '.tip { background: #FFF8E7; border-left: 3px solid #C9A84C; padding: 8px 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0; font-size: 12px; color: #555; line-height: 1.4; }' +
+  '.footer { text-align: center; padding: 12px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; }' +
+  '</style></head><body>' +
+  '<div class="header"><div class="icon">🕷</div>' +
+  '<h2>Auto Invoice Generator</h2><p>Quick Reference Guide</p></div>' +
+  '<div class="content">' +
+  '<div class="section"><h3>Quick Start</h3><ol>' +
+  '<li>Open <strong>⚙️ Settings</strong> and fill in your business name, address, and email</li>' +
+  '<li>Add a client row: company name, contact, email, items, and amounts</li>' +
+  '<li>Select that row and click <strong>▶️ Generate Invoice</strong></li>' +
+  '<li>A Google Doc invoice is created and logged in your dashboard</li>' +
+  '<li>Click <strong>Mark as Paid</strong> when payment arrives</li>' +
+  '</ol></div>' +
+  '<div class="section"><h3>Settings Guide</h3>' +
+  '<div class="setting"><strong>Business Name / Address / Email</strong><span>Appears on every invoice you generate</span></div>' +
+  '<div class="setting"><strong>Invoice Prefix</strong><span>Customizes your invoice numbering (e.g. INV- → INV-001)</span></div>' +
+  '<div class="setting"><strong>Payment Terms</strong><span>Default payment terms text added to every invoice</span></div>' +
+  '<div class="setting"><strong>Tax Rate</strong><span>Applied automatically to invoice line item totals</span></div>' +
+  '<div class="setting"><strong>Auto-Email Client</strong><span>Sends the invoice to the client automatically on generation</span></div>' +
+  '</div>' +
+  '<div class="section"><h3>Tips</h3>' +
+  '<div class="tip">Use <strong>Test Run</strong> first to preview the invoice without sending or logging anything</div>' +
+  '<div class="tip">The dashboard tracks Paid vs Unpaid totals and total revenue automatically</div>' +
+  '<div class="tip">You can regenerate an invoice anytime by selecting its row and running again</div>' +
+  '</div></div>' +
+  '<div class="footer">TAKScripts · takscripts.store</div>' +
+  '</body></html>';
 }

@@ -80,6 +80,7 @@ function onOpen() {
     .addItem('\uD83D\uDCCA View Dashboard', 'viewDashboard')
     .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
+    .addItem('❓ How to Use', 'showHelp')
     .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
     .addToUi();
 }
@@ -1240,4 +1241,56 @@ function getSettingsHtml() {
 '  </script>' +
 '</body>' +
 '</html>';
+}
+
+function showHelp() {
+  var html = HtmlService.createHtmlOutput(getHelpHtml_())
+    .setTitle('How to Use')
+    .setWidth(350);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function getHelpHtml_() {
+  return '<!DOCTYPE html>' +
+  '<html><head><style>' +
+  '* { box-sizing: border-box; margin: 0; padding: 0; }' +
+  'body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #333; background: #f9f9f9; }' +
+  '.header { background: #1A1A1A; color: white; padding: 20px 16px 16px; text-align: center; }' +
+  '.header .icon { font-size: 28px; margin-bottom: 6px; }' +
+  '.header h2 { font-size: 15px; font-weight: 600; color: #C9A84C; margin-bottom: 2px; }' +
+  '.header p { font-size: 11px; color: #888; }' +
+  '.content { padding: 16px; }' +
+  '.section { margin-bottom: 20px; }' +
+  '.section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #C9A84C; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; }' +
+  'ol, ul { padding-left: 18px; }' +
+  'li { margin-bottom: 7px; line-height: 1.4; color: #444; font-size: 12px; }' +
+  '.setting { margin-bottom: 10px; }' +
+  '.setting strong { display: block; font-size: 12px; color: #1A1A1A; margin-bottom: 2px; }' +
+  '.setting span { font-size: 11px; color: #666; line-height: 1.4; display: block; }' +
+  '.tip { background: #FFF8E7; border-left: 3px solid #C9A84C; padding: 8px 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0; font-size: 12px; color: #555; line-height: 1.4; }' +
+  '.footer { text-align: center; padding: 12px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; }' +
+  '</style></head><body>' +
+  '<div class="header"><div class="icon">🕷</div>' +
+  '<h2>Follow-Up Nudger</h2><p>Quick Reference Guide</p></div>' +
+  '<div class="content">' +
+  '<div class="section"><h3>Quick Start</h3><ol>' +
+  '<li>Open <strong>⚙️ Settings</strong> and set how many days before a follow-up is needed</li>' +
+  '<li>Optionally add keywords to focus on specific email types (e.g. "proposal, quote")</li>' +
+  '<li>Click <strong>▶️ Start Follow-Up Nudger</strong> to activate</li>' +
+  '<li>Emails with no reply appear in the dashboard with days waiting and a direct link</li>' +
+  '<li>Enable auto-schedule so nothing slips through while you are busy</li>' +
+  '</ol></div>' +
+  '<div class="section"><h3>Settings Guide</h3>' +
+  '<div class="setting"><strong>Follow-Up After (days)</strong><span>Emails with no reply after this many days get flagged</span></div>' +
+  '<div class="setting"><strong>Keywords</strong><span>Only watch emails whose subject contains these words. Comma-separated. Leave blank for all sent emails.</span></div>' +
+  '<div class="setting"><strong>Ignore Senders</strong><span>Skip follow-up tracking for these addresses (e.g. automated tools, newsletters)</span></div>' +
+  '<div class="setting"><strong>Auto-Schedule</strong><span>Run automatically in the background — daily is recommended</span></div>' +
+  '</div>' +
+  '<div class="section"><h3>Tips</h3>' +
+  '<div class="tip">Start with a <strong>3-day window</strong> to catch quick follow-ups on proposals and quotes</div>' +
+  '<div class="tip">The dashboard shows <strong>Days Waiting</strong> — sort by this column to prioritize who to follow up with first</div>' +
+  '<div class="tip">Use keywords like "proposal, invoice, quote" to focus only on revenue-related emails</div>' +
+  '</div></div>' +
+  '<div class="footer">TAKScripts · takscripts.store</div>' +
+  '</body></html>';
 }

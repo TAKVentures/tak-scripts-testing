@@ -149,6 +149,7 @@ function onOpen() {
     .addItem('\uD83D\uDCCA View Dashboard', 'viewActivityLog')
     .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
+    .addItem('\u2753 How to Use', 'showHelp')
     .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
     .addToUi();
 }
@@ -1344,4 +1345,56 @@ function getSettingsHtml() {
 '  </script>' +
 '</body>' +
 '</html>';
+}
+
+function showHelp() {
+  var html = HtmlService.createHtmlOutput(getHelpHtml_())
+    .setTitle('How to Use')
+    .setWidth(350);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function getHelpHtml_() {
+  return '<!DOCTYPE html>' +
+  '<html><head><style>' +
+  '* { box-sizing: border-box; margin: 0; padding: 0; }' +
+  'body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #333; background: #f9f9f9; }' +
+  '.header { background: #1A1A1A; color: white; padding: 20px 16px 16px; text-align: center; }' +
+  '.header .icon { font-size: 28px; margin-bottom: 6px; }' +
+  '.header h2 { font-size: 15px; font-weight: 600; color: #C9A84C; margin-bottom: 2px; }' +
+  '.header p { font-size: 11px; color: #888; }' +
+  '.content { padding: 16px; }' +
+  '.section { margin-bottom: 20px; }' +
+  '.section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #C9A84C; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; }' +
+  'ol, ul { padding-left: 18px; }' +
+  'li { margin-bottom: 7px; line-height: 1.4; color: #444; font-size: 12px; }' +
+  '.setting { margin-bottom: 10px; }' +
+  '.setting strong { display: block; font-size: 12px; color: #1A1A1A; margin-bottom: 2px; }' +
+  '.setting span { font-size: 11px; color: #666; line-height: 1.4; display: block; }' +
+  '.tip { background: #FFF8E7; border-left: 3px solid #C9A84C; padding: 8px 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0; font-size: 12px; color: #555; line-height: 1.4; }' +
+  '.footer { text-align: center; padding: 12px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; }' +
+  '</style></head><body>' +
+  '<div class="header"><div class="icon">🕷</div>' +
+  '<h2>Auto File Organizer</h2><p>Quick Reference Guide</p></div>' +
+  '<div class="content">' +
+  '<div class="section"><h3>Quick Start</h3><ol>' +
+  '<li>Open <strong>⚙️ Settings</strong> and choose your source Drive folder to scan</li>' +
+  '<li>Choose how to organize: by file type, date, name pattern, or custom rules</li>' +
+  '<li>Optionally set a destination folder (defaults to organizing in place)</li>' +
+  '<li>Click <strong>▶️ Organize Now</strong> to run</li>' +
+  '<li>Files are moved to organized subfolders and every action is logged in the dashboard</li>' +
+  '</ol></div>' +
+  '<div class="section"><h3>Settings Guide</h3>' +
+  '<div class="setting"><strong>Source Folder ID</strong><span>The Google Drive folder to scan. Find the ID in the folder URL after /folders/</span></div>' +
+  '<div class="setting"><strong>Organize By</strong><span>File type creates folders like PDFs, Images, Docs. Date creates year/month folders. Name pattern uses filename rules.</span></div>' +
+  '<div class="setting"><strong>File Types</strong><span>Limit to specific file types — leave blank to organize everything in the folder</span></div>' +
+  '<div class="setting"><strong>Auto-Schedule</strong><span>Run automatically on a schedule to keep your Drive tidy without thinking about it</span></div>' +
+  '</div>' +
+  '<div class="section"><h3>Tips</h3>' +
+  '<div class="tip">Always use <strong>Test Run</strong> first — it previews every move without touching your files</div>' +
+  '<div class="tip">The dashboard logs every file move with source path, destination, and timestamp</div>' +
+  '<div class="tip">Point the source folder at your <strong>Downloads</strong> folder for automatic desktop cleanup</div>' +
+  '</div></div>' +
+  '<div class="footer">TAKScripts · takscripts.store</div>' +
+  '</body></html>';
 }

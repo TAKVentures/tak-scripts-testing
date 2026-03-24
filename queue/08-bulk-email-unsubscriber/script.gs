@@ -64,6 +64,7 @@ function onOpen() {
     .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addItem('\uD83D\uDCCB View Log', 'viewLog')
     .addSeparator()
+    .addItem('❓ How to Use', 'showHelp')
     .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
     .addToUi();
 }
@@ -729,6 +730,58 @@ function onEdit(e) {
 
   applyStatusStyle_(sheet, e.range.getRow(), e.range.getValue());
   refreshDashboardStats();
+}
+
+
+function showHelp() {
+  var html = HtmlService.createHtmlOutput(getHelpHtml_())
+    .setTitle('How to Use')
+    .setWidth(350);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function getHelpHtml_() {
+  return '<!DOCTYPE html>' +
+  '<html><head><style>' +
+  '* { box-sizing: border-box; margin: 0; padding: 0; }' +
+  'body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #333; background: #f9f9f9; }' +
+  '.header { background: #1A1A1A; color: white; padding: 20px 16px 16px; text-align: center; }' +
+  '.header .icon { font-size: 28px; margin-bottom: 6px; }' +
+  '.header h2 { font-size: 15px; font-weight: 600; color: #C9A84C; margin-bottom: 2px; }' +
+  '.header p { font-size: 11px; color: #888; }' +
+  '.content { padding: 16px; }' +
+  '.section { margin-bottom: 20px; }' +
+  '.section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #C9A84C; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; }' +
+  'ol, ul { padding-left: 18px; }' +
+  'li { margin-bottom: 7px; line-height: 1.4; color: #444; font-size: 12px; }' +
+  '.setting { margin-bottom: 10px; }' +
+  '.setting strong { display: block; font-size: 12px; color: #1A1A1A; margin-bottom: 2px; }' +
+  '.setting span { font-size: 11px; color: #666; line-height: 1.4; display: block; }' +
+  '.tip { background: #FFF8E7; border-left: 3px solid #C9A84C; padding: 8px 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0; font-size: 12px; color: #555; line-height: 1.4; }' +
+  '.footer { text-align: center; padding: 12px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; }' +
+  '</style></head><body>' +
+  '<div class="header"><div class="icon">🕷</div>' +
+  '<h2>Bulk Email Unsubscriber</h2><p>Quick Reference Guide</p></div>' +
+  '<div class="content">' +
+  '<div class="section"><h3>Quick Start</h3><ol>' +
+  '<li>Open <strong>⚙️ Settings</strong> and add any senders you want to keep (excluded from scanning)</li>' +
+  '<li>Click <strong>▶️ Scan for Subscriptions</strong> to find mailing lists in your Gmail</li>' +
+  '<li>Review the results in the dashboard — check which ones to remove</li>' +
+  '<li>Click <strong>Process Unsubscribes</strong> to handle the selected ones</li>' +
+  '<li>Re-run anytime to catch new subscriptions</li>' +
+  '</ol></div>' +
+  '<div class="section"><h3>Settings Guide</h3>' +
+  '<div class="setting"><strong>Exclude Senders</strong><span>Protect these senders from being flagged. Comma-separated. Add newsletters you actually want to keep.</span></div>' +
+  '<div class="setting"><strong>Scan Depth</strong><span>How many emails to scan. More emails = more thorough but takes longer to run.</span></div>' +
+  '<div class="setting"><strong>Auto-Mark as Read</strong><span>Marks unsubscribed emails as read to clean up your inbox after processing</span></div>' +
+  '</div>' +
+  '<div class="section"><h3>Tips</h3>' +
+  '<div class="tip">Use <strong>Test Run</strong> to see what the scan finds before processing anything</div>' +
+  '<div class="tip">Add senders to <strong>Exclude</strong> before scanning — it\'s easier than unchecking them from results</div>' +
+  '<div class="tip">The dashboard logs every unsubscribe with a timestamp — useful if you need to track what was removed</div>' +
+  '</div></div>' +
+  '<div class="footer">TAKScripts · takscripts.store</div>' +
+  '</body></html>';
 }
 
 

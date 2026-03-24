@@ -73,6 +73,7 @@ function onOpen() {
     .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addItem('\uD83D\uDCCB View Alert History', 'viewAlertHistory')
     .addSeparator()
+    .addItem('❓ How to Use', 'showHelp')
     .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
     .addToUi();
 }
@@ -875,4 +876,57 @@ function getSettingsHtml() {
 '  </script>' +
 '</body>' +
 '</html>';
+}
+
+function showHelp() {
+  var html = HtmlService.createHtmlOutput(getHelpHtml_())
+    .setTitle('How to Use')
+    .setWidth(350);
+  SpreadsheetApp.getUi().showSidebar(html);
+}
+
+function getHelpHtml_() {
+  return '<!DOCTYPE html>' +
+  '<html><head><style>' +
+  '* { box-sizing: border-box; margin: 0; padding: 0; }' +
+  'body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #333; background: #f9f9f9; }' +
+  '.header { background: #1A1A1A; color: white; padding: 20px 16px 16px; text-align: center; }' +
+  '.header .icon { font-size: 28px; margin-bottom: 6px; }' +
+  '.header h2 { font-size: 15px; font-weight: 600; color: #C9A84C; margin-bottom: 2px; }' +
+  '.header p { font-size: 11px; color: #888; }' +
+  '.content { padding: 16px; }' +
+  '.section { margin-bottom: 20px; }' +
+  '.section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #C9A84C; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e0e0e0; }' +
+  'ol, ul { padding-left: 18px; }' +
+  'li { margin-bottom: 7px; line-height: 1.4; color: #444; font-size: 12px; }' +
+  '.setting { margin-bottom: 10px; }' +
+  '.setting strong { display: block; font-size: 12px; color: #1A1A1A; margin-bottom: 2px; }' +
+  '.setting span { font-size: 11px; color: #666; line-height: 1.4; display: block; }' +
+  '.tip { background: #FFF8E7; border-left: 3px solid #C9A84C; padding: 8px 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0; font-size: 12px; color: #555; line-height: 1.4; }' +
+  '.footer { text-align: center; padding: 12px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; }' +
+  '</style></head><body>' +
+  '<div class="header"><div class="icon">🕷</div>' +
+  '<h2>Inventory Low-Stock Alert</h2><p>Quick Reference Guide</p></div>' +
+  '<div class="content">' +
+  '<div class="section"><h3>Quick Start</h3><ol>' +
+  '<li>Make sure your inventory data is in this sheet with item names and quantities in columns</li>' +
+  '<li>Open <strong>⚙️ Settings</strong> and set your item column, quantity column, and low-stock threshold</li>' +
+  '<li>Click <strong>▶️ Check Stock Now</strong> to run a scan</li>' +
+  '<li>Items below the threshold appear in the dashboard with current stock levels</li>' +
+  '<li>Enable auto-schedule so you get alerted without having to remember to check</li>' +
+  '</ol></div>' +
+  '<div class="section"><h3>Settings Guide</h3>' +
+  '<div class="setting"><strong>Item Column</strong><span>The column letter containing your product names (e.g. A)</span></div>' +
+  '<div class="setting"><strong>Quantity Column</strong><span>The column letter containing current stock numbers (e.g. B)</span></div>' +
+  '<div class="setting"><strong>Low Stock Threshold</strong><span>Items at or below this quantity trigger an alert</span></div>' +
+  '<div class="setting"><strong>Email Alerts</strong><span>Sends an email notification listing all low-stock items when found</span></div>' +
+  '<div class="setting"><strong>Auto-Schedule</strong><span>Hourly or daily automatic checks — runs in the background</span></div>' +
+  '</div>' +
+  '<div class="section"><h3>Tips</h3>' +
+  '<div class="tip">Run <strong>Test Run</strong> first to confirm your column mapping is correct before enabling alerts</div>' +
+  '<div class="tip">Set your threshold slightly <strong>above</strong> your reorder point as a safety buffer — alerts before you actually run out</div>' +
+  '<div class="tip">The dashboard logs every alert with a timestamp so you have a full history of stock events</div>' +
+  '</div></div>' +
+  '<div class="footer">TAKScripts · takscripts.store</div>' +
+  '</body></html>';
 }
