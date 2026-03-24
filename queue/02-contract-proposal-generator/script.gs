@@ -527,7 +527,60 @@ function generateContract() {
  * Test Run — generates a proposal without emailing.
  */
 function testRun() {
-  generateDocument_('Proposal', true);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var settings = loadSettings();
+  var lines = [];
+
+  lines.push('🧪 TEST RUN — No document will be created');
+  lines.push('');
+
+  if (!settings.businessName) {
+    lines.push('❌ No business name configured.');
+    lines.push('Go to 🕷 TAKScripts → ⚙️ Settings to set up your business details.');
+    Logger.log(lines.join('\n'));
+    try { SpreadsheetApp.getUi().alert(lines.join('\n')); } catch(e) { Logger.log(lines.join('\n')); }
+    return;
+  }
+
+  lines.push('✅ Business: ' + settings.businessName);
+  lines.push('✅ Proposal prefix: ' + (settings.proposalPrefix || 'PROP-'));
+  lines.push('✅ Contract prefix: ' + (settings.contractPrefix || 'CONTRACT-'));
+  lines.push('');
+
+  var activeSheet = ss.getActiveSheet();
+  if (activeSheet.getName() !== CLIENT_SHEET_NAME) {
+    lines.push('⚠️  Not on the Clients sheet — switch to the "' + CLIENT_SHEET_NAME + '" tab and select a client row to test generation.');
+    Logger.log(lines.join('\n'));
+    try { SpreadsheetApp.getUi().alert(lines.join('\n')); } catch(e) { Logger.log(lines.join('\n')); }
+    return;
+  }
+
+  var activeRow = ss.getActiveRange().getRow();
+  if (activeRow < 2) {
+    lines.push('⚠️  Select a client data row (not the header row).');
+    Logger.log(lines.join('\n'));
+    try { SpreadsheetApp.getUi().alert(lines.join('\n')); } catch(e) { Logger.log(lines.join('\n')); }
+    return;
+  }
+
+  var clientSheet = ss.getSheetByName(CLIENT_SHEET_NAME);
+  var rowData = clientSheet.getRange(activeRow, 1, 1, CLIENT_HEADERS.length).getValues()[0];
+  var company = rowData[0] || '(none)';
+  var contactName = rowData[1] || '(none)';
+  var email = rowData[2] || '(none)';
+  var price = rowData[8] || '(none)';
+
+  lines.push('✅ Client row selected: Row ' + activeRow);
+  lines.push('   Company: ' + company);
+  lines.push('   Contact: ' + contactName);
+  lines.push('   Email:   ' + email);
+  lines.push('   Amount:  ' + price);
+  lines.push('');
+  lines.push('✅ Ready — "Generate Proposal" and "Generate Contract" from the menu will work.');
+  lines.push('   (No email will be sent in test mode)');
+
+  Logger.log(lines.join('\n'));
+  try { SpreadsheetApp.getUi().alert(lines.join('\n')); } catch(e) { Logger.log(lines.join('\n')); }
 }
 
 /**
