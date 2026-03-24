@@ -189,7 +189,11 @@ function loadSettings() {
     emailBody: 'Hi {{contactName}},\n\nPlease find your {{type}} attached. Review at your convenience and let me know if you have any questions.\n\nBest regards,\n{{business}}',
   };
   if (!raw) return defaults;
-  return Object.assign({}, defaults, JSON.parse(raw));
+  const saved = JSON.parse(raw);
+  for (var key in defaults) {
+    if (saved[key] === undefined) saved[key] = defaults[key];
+  }
+  return saved;
 }
 
 // ═══════════════════════════════════════════
@@ -294,7 +298,11 @@ function refreshDashboardStats() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('No dashboard yet. Generate a proposal or contract first.');
+    try {
+      SpreadsheetApp.getUi().alert('No dashboard yet. Generate a proposal or contract first.');
+    } catch(e) {
+      Logger.log('No dashboard yet. Generate a proposal or contract first.');
+    }
     return;
   }
 
@@ -532,11 +540,15 @@ function generateDocument_(docType, isTest) {
   const settings = loadSettings();
 
   if (!settings.businessName) {
-    ui.alert(
-      '\u26A0\uFE0F Setup Required',
-      'Business name not set.\n\nOpen \uD83D\uDD77 TAKScripts \u2192 \u2699\uFE0F Settings to configure your business details.',
-      ui.ButtonSet.OK
-    );
+    try {
+      ui.alert(
+        '\u26A0\uFE0F Setup Required',
+        'Business name not set.\n\nOpen \uD83D\uDD77 TAKScripts \u2192 \u2699\uFE0F Settings to configure your business details.',
+        ui.ButtonSet.OK
+      );
+    } catch(e) {
+      Logger.log('Business name not set.\n\nOpen \uD83D\uDD77 TAKScripts \u2192 \u2699\uFE0F Settings to configure your business details.');
+    }
     return;
   }
 
@@ -546,17 +558,25 @@ function generateDocument_(docType, isTest) {
   // Must be on the Clients sheet with a row selected
   const activeSheet = ss.getActiveSheet();
   if (activeSheet.getName() !== CLIENT_SHEET_NAME) {
-    ui.alert(
-      '\u26A0\uFE0F Select a Client First',
-      'Go to the "' + CLIENT_SHEET_NAME + '" sheet and click on the row of the client you want to generate a ' + docType.toLowerCase() + ' for.',
-      ui.ButtonSet.OK
-    );
+    try {
+      ui.alert(
+        '\u26A0\uFE0F Select a Client First',
+        'Go to the "' + CLIENT_SHEET_NAME + '" sheet and click on the row of the client you want to generate a ' + docType.toLowerCase() + ' for.',
+        ui.ButtonSet.OK
+      );
+    } catch(e) {
+      Logger.log('Go to the "' + CLIENT_SHEET_NAME + '" sheet and click on the row of the client you want to generate a ' + docType.toLowerCase() + ' for.');
+    }
     return;
   }
 
   const activeRow = ss.getActiveRange().getRow();
   if (activeRow < 2) {
-    ui.alert('\u26A0\uFE0F Select a client row (not the header).', ui.ButtonSet.OK);
+    try {
+      ui.alert('\u26A0\uFE0F Select a client row (not the header).', ui.ButtonSet.OK);
+    } catch(e) {
+      Logger.log('\u26A0\uFE0F Select a client row (not the header).');
+    }
     return;
   }
 
@@ -576,7 +596,11 @@ function generateDocument_(docType, isTest) {
   };
 
   if (!client.company) {
-    ui.alert('\u26A0\uFE0F Missing company name in the selected row.', ui.ButtonSet.OK);
+    try {
+      ui.alert('\u26A0\uFE0F Missing company name in the selected row.', ui.ButtonSet.OK);
+    } catch(e) {
+      Logger.log('\u26A0\uFE0F Missing company name in the selected row.');
+    }
     return;
   }
 
@@ -629,14 +653,18 @@ function generateDocument_(docType, isTest) {
   });
 
   const emoji = isTest ? '\uD83E\uDDEA' : '\u2705';
-  ui.alert(
-    emoji + ' ' + docType + ' Generated',
-    docNumber + ' for ' + client.company + '\n\n' +
-    'PDF saved to: ' + FOLDER_NAME +
-    (isTest ? '\n\nTest run \u2014 no email was sent.' : '\n\nEmailed to: ' + client.email) +
-    '\n\nView it in the \uD83D\uDCCA Pipeline Dashboard.',
-    ui.ButtonSet.OK
-  );
+  try {
+    ui.alert(
+      emoji + ' ' + docType + ' Generated',
+      docNumber + ' for ' + client.company + '\n\n' +
+      'PDF saved to: ' + FOLDER_NAME +
+      (isTest ? '\n\nTest run \u2014 no email was sent.' : '\n\nEmailed to: ' + client.email) +
+      '\n\nView it in the \uD83D\uDCCA Pipeline Dashboard.',
+      ui.ButtonSet.OK
+    );
+  } catch(e) {
+    Logger.log(docNumber + ' for ' + client.company + '\n\nPDF saved to: ' + FOLDER_NAME + (isTest ? '\n\nTest run \u2014 no email was sent.' : '\n\nEmailed to: ' + client.email) + '\n\nView it in the \uD83D\uDCCA Pipeline Dashboard.');
+  }
 }
 
 /**
@@ -704,23 +732,35 @@ function updateDocStatus_(newStatus) {
   const sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
 
   if (!sheet) {
-    ui.alert('No dashboard found. Generate a document first.');
+    try {
+      SpreadsheetApp.getUi().alert('No dashboard found. Generate a document first.');
+    } catch(e) {
+      Logger.log('No dashboard found. Generate a document first.');
+    }
     return;
   }
 
   // Must be on the dashboard sheet
   if (ss.getActiveSheet().getName() !== DASHBOARD_SHEET_NAME) {
-    ui.alert(
-      '\u26A0\uFE0F Go to the Pipeline Dashboard first',
-      'Navigate to the "\uD83D\uDCCA Pipeline Dashboard" sheet, select the row to update, then run this action again.',
-      ui.ButtonSet.OK
-    );
+    try {
+      SpreadsheetApp.getUi().alert(
+        '\u26A0\uFE0F Go to the Pipeline Dashboard first',
+        'Navigate to the "\uD83D\uDCCA Pipeline Dashboard" sheet, select the row to update, then run this action again.',
+        ui.ButtonSet.OK
+      );
+    } catch(e) {
+      Logger.log('Navigate to the "\uD83D\uDCCA Pipeline Dashboard" sheet, select the row to update, then run this action again.');
+    }
     return;
   }
 
   const row = ss.getActiveRange().getRow();
   if (row <= DASHBOARD_HEADER_ROW) {
-    ui.alert('\u26A0\uFE0F Select a document row below the headers.');
+    try {
+      SpreadsheetApp.getUi().alert('\u26A0\uFE0F Select a document row below the headers.');
+    } catch(e) {
+      Logger.log('\u26A0\uFE0F Select a document row below the headers.');
+    }
     return;
   }
 
@@ -739,7 +779,11 @@ function updateDocStatus_(newStatus) {
   applyRowStyle_(sheet, row, newStatus.toLowerCase(), false);
   refreshDashboardStats();
 
-  ui.alert('\u2705 ' + docNumber + ' marked as ' + newStatus + '. Dashboard updated.');
+  try {
+    SpreadsheetApp.getUi().alert('\u2705 ' + docNumber + ' marked as ' + newStatus + '. Dashboard updated.');
+  } catch(e) {
+    Logger.log('\u2705 ' + docNumber + ' marked as ' + newStatus + '. Dashboard updated.');
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1239,14 +1283,18 @@ function setupSheets() {
   getOrCreateDashboard_(ss);
   ss.setActiveSheet(ss.getSheetByName(CLIENT_SHEET_NAME));
 
-  SpreadsheetApp.getUi().alert(
-    '\u2705 Setup Complete',
-    'Your sheets are ready:\n\n' +
-    '\u2022 \uD83D\uDCCA Pipeline Dashboard \u2014 Win rate, totals, and document log\n' +
-    '\u2022 \uD83D\uDC65 Clients \u2014 Add your client data here\n\n' +
-    'Next: Go to \uD83D\uDD77 TAKScripts \u2192 \u2699\uFE0F Settings to add your business details.',
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
+  try {
+    SpreadsheetApp.getUi().alert(
+      '\u2705 Setup Complete',
+      'Your sheets are ready:\n\n' +
+      '\u2022 \uD83D\uDCCA Pipeline Dashboard \u2014 Win rate, totals, and document log\n' +
+      '\u2022 \uD83D\uDC65 Clients \u2014 Add your client data here\n\n' +
+      'Next: Go to \uD83D\uDD77 TAKScripts \u2192 \u2699\uFE0F Settings to add your business details.',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  } catch(e) {
+    Logger.log('Your sheets are ready. Next: Go to \uD83D\uDD77 TAKScripts \u2192 \u2699\uFE0F Settings to add your business details.');
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1352,8 +1400,8 @@ function getSettingsHtml() {
       border-radius: 6px;
       display: none;
     }
-    .status.success { display: block; background: #e8f5e9; color: #2e7d32; }
-    .status.error { display: block; background: #ffebee; color: #c62828; }
+    .status.success { display: block; background: #E8F5E9; color: #2E7D32; }
+    .status.error { display: block; background: #FFEBEE; color: #C62828; }
     .divider { border-top: 1px solid #eee; margin: 20px 0; }
     .variables {
       background: #f5f5f5;
@@ -1447,9 +1495,10 @@ function getSettingsHtml() {
       </div>
     </div>
 
+    <div id="status" class="status"></div>
     <div class="divider"></div>
 
-    <button class="btn btn-primary" onclick="save()">Save Settings</button>
+    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>
     <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>
 
     <div class="divider"></div>
@@ -1459,8 +1508,6 @@ function getSettingsHtml() {
     <button class="btn btn-action" onclick="runAction('markAsExpired')">\u274C Mark Selected Row as Expired</button>
     <button class="btn btn-action" onclick="runAction('refreshDashboardStats')" style="margin-top: 10px;">\uD83D\uDD04 Refresh Dashboard Stats</button>
     <button class="btn btn-action" onclick="runAction('setupSheets')">\uD83D\uDD27 Run Initial Setup</button>
-
-    <div id="status" class="status"></div>
   </div>
 
   <script>
@@ -1492,10 +1539,26 @@ function getSettingsHtml() {
         emailSubject: document.getElementById('emailSubject').value,
         emailBody: document.getElementById('emailBody').value,
       };
-      showStatus('', '');
+      var statusEl = document.getElementById('status');
+      var saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving\u2026';
       google.script.run
-        .withSuccessHandler(function() { showStatus('\u2713 Settings saved successfully', 'success'); })
-        .withFailureHandler(function(err) { showStatus('\u2715 Error: ' + err.message, 'error'); })
+        .withSuccessHandler(function() {
+          statusEl.textContent = '\u2713 Settings saved successfully';
+          statusEl.className = 'status success';
+          saveBtn.textContent = '\u2713 Saved!';
+          setTimeout(function() {
+            saveBtn.textContent = 'Save Settings';
+            saveBtn.disabled = false;
+          }, 2500);
+        })
+        .withFailureHandler(function(err) {
+          statusEl.textContent = '\u2715 Error: ' + err.message;
+          statusEl.className = 'status error';
+          saveBtn.textContent = 'Save Settings';
+          saveBtn.disabled = false;
+        })
         .saveSettings(settings);
     }
 

@@ -103,19 +103,26 @@ function saveSettings(settings) {
   return { success: true };
 }
 
+function getDefaultSettings_() {
+  return {
+    startDate: '',
+    endDate: '',
+    subject: "Out of Office — I'll be back soon",
+    message: "Hi {{name}},\n\nThanks for reaching out! I'm currently out of the office from {{start}} to {{end}} and won't be checking email regularly.\n\nI'll get back to you as soon as I return.\n\nBest,\n[Your Name]",
+    skipDomains: 'noreply, no-reply, notifications, mailer-daemon, newsletter',
+  };
+}
+
 function loadSettings() {
   const props = PropertiesService.getScriptProperties();
   const raw = props.getProperty('ooo_settings');
-  if (!raw) {
-    return {
-      startDate: '',
-      endDate: '',
-      subject: "Out of Office — I'll be back soon",
-      message: "Hi {{name}},\n\nThanks for reaching out! I'm currently out of the office from {{start}} to {{end}} and won't be checking email regularly.\n\nI'll get back to you as soon as I return.\n\nBest,\n[Your Name]",
-      skipDomains: 'noreply, no-reply, notifications, mailer-daemon, newsletter',
-    };
+  if (!raw) return getDefaultSettings_();
+  const saved = JSON.parse(raw);
+  const defaults = getDefaultSettings_();
+  for (const key in defaults) {
+    if (saved[key] === undefined) saved[key] = defaults[key];
   }
-  return JSON.parse(raw);
+  return saved;
 }
 
 
@@ -391,9 +398,13 @@ function formatDate(date) {
 function startOOO() {
   const settings = loadSettings();
   if (!settings.startDate || !settings.endDate) {
-    SpreadsheetApp.getUi().alert(
-      '⚠️ No dates configured.\n\nOpen TAKScripts → OOO Settings to set your dates first.'
-    );
+    try {
+      SpreadsheetApp.getUi().alert(
+        '⚠️ No dates configured.\n\nOpen TAKScripts → OOO Settings to set your dates first.'
+      );
+    } catch(e) {
+      Logger.log('⚠️ No dates configured.\n\nOpen TAKScripts → OOO Settings to set your dates first.');
+    }
     return;
   }
 
@@ -407,12 +418,16 @@ function startOOO() {
 
   checkAndReply();
 
-  SpreadsheetApp.getUi().alert(
-    '✅ OOO Auto-Reply is ACTIVE\n\n' +
-    'Running from ' + settings.startDate + ' to ' + settings.endDate + '\n' +
-    'Checking every 5 minutes for new emails.\n\n' +
-    'To stop: TAKScripts → Stop OOO'
-  );
+  try {
+    SpreadsheetApp.getUi().alert(
+      '✅ OOO Auto-Reply is ACTIVE\n\n' +
+      'Running from ' + settings.startDate + ' to ' + settings.endDate + '\n' +
+      'Checking every 5 minutes for new emails.\n\n' +
+      'To stop: TAKScripts → Stop OOO'
+    );
+  } catch(e) {
+    Logger.log('✅ OOO Auto-Reply is ACTIVE\n\nRunning from ' + settings.startDate + ' to ' + settings.endDate + '\nChecking every 5 minutes for new emails.\n\nTo stop: TAKScripts → Stop OOO');
+  }
 }
 
 function stopOOO() {
@@ -458,7 +473,11 @@ function testRun() {
 
   const output = results.join('\n');
   Logger.log(output);
-  SpreadsheetApp.getUi().alert(output);
+  try {
+    SpreadsheetApp.getUi().alert(output);
+  } catch(e) {
+    Logger.log(output);
+  }
 }
 
 
@@ -550,7 +569,7 @@ function getSettingsHtml() {
 
     <div class="divider"></div>
 
-    <button class="btn btn-primary" onclick="save()">Save Settings</button>
+    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>
     <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>
 
     <div id="status" class="status"></div>
@@ -566,7 +585,7 @@ function getSettingsHtml() {
     }).loadSettings();
 
     function save() {
-      var settings = {
+      const settings = {
         startDate: document.getElementById('startDate').value,
         endDate: document.getElementById('endDate').value,
         subject: document.getElementById('subject').value,
@@ -574,18 +593,25 @@ function getSettingsHtml() {
         skipDomains: document.getElementById('skipDomains').value,
       };
 
-      var statusEl = document.getElementById('status');
-      statusEl.className = 'status';
-      statusEl.style.display = 'none';
-
+      const statusEl = document.getElementById('status');
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
       google.script.run
         .withSuccessHandler(function() {
           statusEl.textContent = '✓ Settings saved successfully';
           statusEl.className = 'status success';
+          saveBtn.textContent = '✓ Saved!';
+          setTimeout(function() {
+            saveBtn.textContent = 'Save Settings';
+            saveBtn.disabled = false;
+          }, 2500);
         })
         .withFailureHandler(function(err) {
           statusEl.textContent = '✕ Error: ' + err.message;
           statusEl.className = 'status error';
+          saveBtn.textContent = 'Save Settings';
+          saveBtn.disabled = false;
         })
         .saveSettings(settings);
     }

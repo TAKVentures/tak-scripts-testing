@@ -85,7 +85,11 @@ function viewLog() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(LOG_SHEET_NAME);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('No unsubscribe log yet. Run a scan and process unsubscribes first.');
+    try {
+      SpreadsheetApp.getUi().alert('No unsubscribe log yet. Run a scan and process unsubscribes first.');
+    } catch(e) {
+      Logger.log('No unsubscribe log yet. Run a scan and process unsubscribes first.');
+    }
     return;
   }
   ss.setActiveSheet(sheet);
@@ -110,7 +114,11 @@ function showAbout() {
       '</p>' +
     '</div>'
   ).setWidth(300).setHeight(280);
-  SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
+  try {
+    SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
+  } catch(e) {
+    Logger.log('About TAKScripts');
+  }
 }
 
 
@@ -124,20 +132,27 @@ function saveSettings(settings) {
   return { success: true };
 }
 
+function getDefaultSettings_() {
+  return {
+    scanDays: 90,
+    minEmails: 3,
+    includePromotions: true,
+    includeUpdates: true,
+    includeSocial: false,
+    excludeSenders: '',
+  };
+}
+
 function loadSettings() {
   var props = PropertiesService.getScriptProperties();
   var raw = props.getProperty(SETTINGS_KEY);
-  if (!raw) {
-    return {
-      scanDays: 90,
-      minEmails: 3,
-      includePromotions: true,
-      includeUpdates: true,
-      includeSocial: false,
-      excludeSenders: '',
-    };
+  if (!raw) return getDefaultSettings_();
+  var saved = JSON.parse(raw);
+  var defaults = getDefaultSettings_();
+  for (var key in defaults) {
+    if (saved[key] === undefined) saved[key] = defaults[key];
   }
-  return JSON.parse(raw);
+  return saved;
 }
 
 
@@ -271,12 +286,16 @@ function scanSubscriptions() {
   var ui = SpreadsheetApp.getUi();
   var settings = loadSettings();
 
-  ui.alert(
-    '\u25B6\uFE0F Scanning Subscriptions',
-    'Scanning the last ' + settings.scanDays + ' days of email.\n' +
-    'This may take a minute. You\'ll see results on the "' + DASHBOARD_SHEET_NAME + '" tab when done.',
-    ui.ButtonSet.OK
-  );
+  try {
+    ui.alert(
+      '\u25B6\uFE0F Scanning Subscriptions',
+      'Scanning the last ' + settings.scanDays + ' days of email.\n' +
+      'This may take a minute. You\'ll see results on the "' + DASHBOARD_SHEET_NAME + '" tab when done.',
+      ui.ButtonSet.OK
+    );
+  } catch(e) {
+    Logger.log('\u25B6\uFE0F Scanning Subscriptions');
+  }
 
   var subscriptions = findSubscriptions_(settings, false);
   writeScannerSheet_(subscriptions);
@@ -285,16 +304,20 @@ function scanSubscriptions() {
   var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (sheet) ss.setActiveSheet(sheet);
 
-  ui.alert(
-    '\u2705 Scan Complete',
-    'Found ' + subscriptions.length + ' subscriptions.\n\n' +
-    'To unsubscribe:\n' +
-    '1. Set the Status column to "Unsubscribe" for the ones you want to remove\n' +
-    '2. Go to \uD83D\uDD77 TAKScripts \u2192 \u25B6\uFE0F Scan Subscriptions\n' +
-    '   (it will process any marked rows)\n\n' +
-    'Or use the dropdown in column F to mark rows.',
-    ui.ButtonSet.OK
-  );
+  try {
+    ui.alert(
+      '\u2705 Scan Complete',
+      'Found ' + subscriptions.length + ' subscriptions.\n\n' +
+      'To unsubscribe:\n' +
+      '1. Set the Status column to "Unsubscribe" for the ones you want to remove\n' +
+      '2. Go to \uD83D\uDD77 TAKScripts \u2192 \u25B6\uFE0F Scan Subscriptions\n' +
+      '   (it will process any marked rows)\n\n' +
+      'Or use the dropdown in column F to mark rows.',
+      ui.ButtonSet.OK
+    );
+  } catch(e) {
+    Logger.log('\u2705 Scan Complete');
+  }
 
   processUnsubscribes_();
 }
@@ -303,12 +326,16 @@ function testRun() {
   var ui = SpreadsheetApp.getUi();
   var settings = loadSettings();
 
-  ui.alert(
-    '\uD83E\uDDEA Test Run',
-    'Scanning the last ' + settings.scanDays + ' days for subscriptions.\n' +
-    'No unsubscribe actions will be taken — preview only.',
-    ui.ButtonSet.OK
-  );
+  try {
+    ui.alert(
+      '\uD83E\uDDEA Test Run',
+      'Scanning the last ' + settings.scanDays + ' days for subscriptions.\n' +
+      'No unsubscribe actions will be taken — preview only.',
+      ui.ButtonSet.OK
+    );
+  } catch(e) {
+    Logger.log('\uD83E\uDDEA Test Run');
+  }
 
   var subscriptions = findSubscriptions_(settings, true);
   writeScannerSheet_(subscriptions);
@@ -317,13 +344,17 @@ function testRun() {
   var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (sheet) ss.setActiveSheet(sheet);
 
-  ui.alert(
-    '\uD83E\uDDEA Test Complete',
-    'Found ' + subscriptions.length + ' subscriptions (preview only).\n\n' +
-    'No actions were taken. Review the results on the "' + DASHBOARD_SHEET_NAME + '" tab.\n' +
-    'When ready, use \u25B6\uFE0F Scan Subscriptions to run for real.',
-    ui.ButtonSet.OK
-  );
+  try {
+    ui.alert(
+      '\uD83E\uDDEA Test Complete',
+      'Found ' + subscriptions.length + ' subscriptions (preview only).\n\n' +
+      'No actions were taken. Review the results on the "' + DASHBOARD_SHEET_NAME + '" tab.\n' +
+      'When ready, use \u25B6\uFE0F Scan Subscriptions to run for real.',
+      ui.ButtonSet.OK
+    );
+  } catch(e) {
+    Logger.log('\uD83E\uDDEA Test Complete');
+  }
 }
 
 function findSubscriptions_(settings, isTestRun) {
@@ -334,12 +365,17 @@ function findSubscriptions_(settings, isTestRun) {
     .map(function(s) { return s.trim().toLowerCase(); })
     .filter(Boolean);
 
+  var excludeQuery = '';
+  for (var ex2 = 0; ex2 < excludeList.length; ex2++) {
+    excludeQuery += ' -from:' + excludeList[ex2];
+  }
+
   var queries = [];
-  queries.push('has:nousersubs newer_than:' + daysBack + 'd');
-  if (settings.includePromotions) queries.push('category:promotions newer_than:' + daysBack + 'd');
-  if (settings.includeUpdates)    queries.push('category:updates newer_than:' + daysBack + 'd');
-  if (settings.includeSocial)     queries.push('category:social newer_than:' + daysBack + 'd');
-  queries.push('label:^unsub newer_than:' + daysBack + 'd');
+  queries.push('has:nousersubs newer_than:' + daysBack + 'd' + excludeQuery);
+  if (settings.includePromotions) queries.push('category:promotions newer_than:' + daysBack + 'd' + excludeQuery);
+  if (settings.includeUpdates)    queries.push('category:updates newer_than:' + daysBack + 'd' + excludeQuery);
+  if (settings.includeSocial)     queries.push('category:social newer_than:' + daysBack + 'd' + excludeQuery);
+  queries.push('label:^unsub newer_than:' + daysBack + 'd' + excludeQuery);
 
   var seenThreadIds = {};
   var allThreads = [];
@@ -538,12 +574,16 @@ function processUnsubscribes_() {
   refreshDashboardStats();
 
   if (actionsPerformed > 0) {
-    SpreadsheetApp.getUi().alert(
-      '\u2705 Unsubscribe Complete',
-      'Successfully processed ' + actionsPerformed + ' unsubscribe request(s).\n\n' +
-      'Check the "' + LOG_SHEET_NAME + '" tab for full details.',
-      SpreadsheetApp.getUi().ButtonSet.OK
-    );
+    try {
+      SpreadsheetApp.getUi().alert(
+        '\u2705 Unsubscribe Complete',
+        'Successfully processed ' + actionsPerformed + ' unsubscribe request(s).\n\n' +
+        'Check the "' + LOG_SHEET_NAME + '" tab for full details.',
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } catch(e) {
+      Logger.log('\u2705 Unsubscribe Complete');
+    }
   }
 }
 
@@ -760,10 +800,10 @@ function getSettingsHtml() {
 '      <input type="text" id="excludeSenders" placeholder="boss@company.com, team@work.com" />' +
 '      <div class="help">Comma-separated. Emails containing these strings will be skipped.</div>' +
 '    </div>' +
-'    <div class="divider"></div>' +
-'    <button class="btn btn-primary" onclick="save()">Save Settings</button>' +
-'    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>' +
 '    <div id="status" class="status"></div>' +
+'    <div class="divider"></div>' +
+'    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>' +
+'    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>' +
 '  </div>' +
 '  <script>' +
 '    google.script.run.withSuccessHandler(function(settings) {' +
@@ -784,10 +824,25 @@ function getSettingsHtml() {
 '        excludeSenders: document.getElementById("excludeSenders").value,' +
 '      };' +
 '      var statusEl = document.getElementById("status");' +
-'      statusEl.className = "status"; statusEl.style.display = "none";' +
+'      var saveBtn = document.getElementById("saveBtn");' +
+'      saveBtn.disabled = true;' +
+'      saveBtn.textContent = "Saving\u2026";' +
 '      google.script.run' +
-'        .withSuccessHandler(function() { statusEl.textContent = "\u2713 Settings saved successfully"; statusEl.className = "status success"; })' +
-'        .withFailureHandler(function(err) { statusEl.textContent = "\u2715 Error: " + err.message; statusEl.className = "status error"; })' +
+'        .withSuccessHandler(function() {' +
+'          statusEl.textContent = "\u2713 Settings saved successfully";' +
+'          statusEl.className = "status success";' +
+'          saveBtn.textContent = "\u2713 Saved!";' +
+'          setTimeout(function() {' +
+'            saveBtn.textContent = "Save Settings";' +
+'            saveBtn.disabled = false;' +
+'          }, 2500);' +
+'        })' +
+'        .withFailureHandler(function(err) {' +
+'          statusEl.textContent = "\u2715 Error: " + err.message;' +
+'          statusEl.className = "status error";' +
+'          saveBtn.textContent = "Save Settings";' +
+'          saveBtn.disabled = false;' +
+'        })' +
 '        .saveSettings(settings);' +
 '    }' +
 '  </script>' +

@@ -110,20 +110,27 @@ function saveSettings(settings) {
   return { success: true };
 }
 
+function getDefaultSettings_() {
+  return {
+    checkFrequency: '5',
+    alertEmail: Session.getActiveUser().getEmail() || '',
+    keywords: 'urgent, asap, time-sensitive, action required',
+    quietStart: '22:00',
+    quietEnd: '07:00',
+    quietEnabled: false,
+  };
+}
+
 function loadSettings() {
   const props = PropertiesService.getScriptProperties();
   const raw = props.getProperty(PROP_SETTINGS);
-  if (!raw) {
-    return {
-      checkFrequency: '5',
-      alertEmail: Session.getActiveUser().getEmail() || '',
-      keywords: 'urgent, asap, time-sensitive, action required',
-      quietStart: '22:00',
-      quietEnd: '07:00',
-      quietEnabled: false,
-    };
+  if (!raw) return getDefaultSettings_();
+  const saved = JSON.parse(raw);
+  const defaults = getDefaultSettings_();
+  for (const key in defaults) {
+    if (saved[key] === undefined) saved[key] = defaults[key];
   }
-  return JSON.parse(raw);
+  return saved;
 }
 
 
@@ -599,13 +606,17 @@ function startMonitoring() {
   checkForVIPEmails();
 
   const vips = getVIPList_();
-  SpreadsheetApp.getUi().alert(
-    '✅ VIP Monitoring is ACTIVE\n\n' +
-    'Tracking ' + vips.length + ' VIP contact(s).\n' +
-    'Checking every ' + freq + ' minute(s).\n\n' +
-    'Add or edit VIPs in the "⭐ VIP Contacts" sheet.\n' +
-    'To stop: 🕷 TAKScripts → ⏹ Stop Monitoring'
-  );
+  try {
+    SpreadsheetApp.getUi().alert(
+      '✅ VIP Monitoring is ACTIVE\n\n' +
+      'Tracking ' + vips.length + ' VIP contact(s).\n' +
+      'Checking every ' + freq + ' minute(s).\n\n' +
+      'Add or edit VIPs in the "⭐ VIP Contacts" sheet.\n' +
+      'To stop: 🕷 TAKScripts → ⏹ Stop Monitoring'
+    );
+  } catch(e) {
+    Logger.log('✅ VIP Monitoring is ACTIVE\n\nTracking ' + vips.length + ' VIP contact(s).\nChecking every ' + freq + ' minute(s).\n\nAdd or edit VIPs in the "⭐ VIP Contacts" sheet.\nTo stop: 🕷 TAKScripts → ⏹ Stop Monitoring');
+  }
 }
 
 function stopMonitoring() {
@@ -622,12 +633,16 @@ function stopMonitoring_(showAlert) {
 
   if (showAlert) {
     PropertiesService.getScriptProperties().deleteProperty(PROP_PROCESSED);
-    SpreadsheetApp.getUi().alert(
-      '⏹ VIP Monitoring STOPPED\n\n' +
-      'No more alerts will be sent.\n' +
-      'Processed message history has been cleared.\n\n' +
-      'To resume: 🕷 TAKScripts → ▶️ Start Monitoring'
-    );
+    try {
+      SpreadsheetApp.getUi().alert(
+        '⏹ VIP Monitoring STOPPED\n\n' +
+        'No more alerts will be sent.\n' +
+        'Processed message history has been cleared.\n\n' +
+        'To resume: 🕷 TAKScripts → ▶️ Start Monitoring'
+      );
+    } catch(e) {
+      Logger.log('⏹ VIP Monitoring STOPPED\n\nNo more alerts will be sent.\nProcessed message history has been cleared.\n\nTo resume: 🕷 TAKScripts → ▶️ Start Monitoring');
+    }
   }
 }
 
@@ -690,7 +705,11 @@ function testRun() {
 
   const output = results.join('\n');
   Logger.log(output);
-  SpreadsheetApp.getUi().alert(output);
+  try {
+    SpreadsheetApp.getUi().alert(output);
+  } catch(e) {
+    Logger.log(output);
+  }
 }
 
 /**
@@ -699,13 +718,17 @@ function testRun() {
 function install() {
   ensureVIPSheet();
   getOrCreateDashboard_();
-  SpreadsheetApp.getUi().alert(
-    '✅ Setup Complete\n\n' +
-    'Sheets created:\n' +
-    '• ⭐ VIP Contacts — add your VIPs here\n' +
-    '• 📊 VIP Dashboard — alerts will appear here\n\n' +
-    'Next: Open 🕷 TAKScripts → ⚙️ Settings to configure.'
-  );
+  try {
+    SpreadsheetApp.getUi().alert(
+      '✅ Setup Complete\n\n' +
+      'Sheets created:\n' +
+      '• ⭐ VIP Contacts — add your VIPs here\n' +
+      '• 📊 VIP Dashboard — alerts will appear here\n\n' +
+      'Next: Open 🕷 TAKScripts → ⚙️ Settings to configure.'
+    );
+  } catch(e) {
+    Logger.log('✅ Setup Complete\n\nSheets created:\n• ⭐ VIP Contacts — add your VIPs here\n• 📊 VIP Dashboard — alerts will appear here\n\nNext: Open 🕷 TAKScripts → ⚙️ Settings to configure.');
+  }
 }
 
 
@@ -818,7 +841,7 @@ function getSettingsHtml() {
 
     <div class="divider"></div>
 
-    <button class="btn btn-primary" onclick="save()">Save Settings</button>
+    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>
     <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>
 
     <div id="status" class="status"></div>
@@ -835,7 +858,7 @@ function getSettingsHtml() {
     }).loadSettings();
 
     function save() {
-      var settings = {
+      const settings = {
         checkFrequency: document.getElementById('checkFrequency').value,
         alertEmail: document.getElementById('alertEmail').value,
         keywords: document.getElementById('keywords').value,
@@ -844,22 +867,34 @@ function getSettingsHtml() {
         quietEnabled: document.getElementById('quietEnabled').checked,
       };
 
-      var freq = parseInt(settings.checkFrequency, 10);
+      const freq = parseInt(settings.checkFrequency, 10);
+      const statusEl = document.getElementById('status');
       if (freq < 1 || freq > 15) {
-        showStatus('Check frequency must be between 1 and 15 minutes.', 'error');
+        statusEl.textContent = '✕ Check frequency must be between 1 and 15 minutes.';
+        statusEl.className = 'status error';
         return;
       }
 
+      const saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
       google.script.run
-        .withSuccessHandler(function() { showStatus('Settings saved successfully', 'success'); })
-        .withFailureHandler(function(err) { showStatus('Error: ' + err.message, 'error'); })
+        .withSuccessHandler(function() {
+          statusEl.textContent = '✓ Settings saved successfully';
+          statusEl.className = 'status success';
+          saveBtn.textContent = '✓ Saved!';
+          setTimeout(function() {
+            saveBtn.textContent = 'Save Settings';
+            saveBtn.disabled = false;
+          }, 2500);
+        })
+        .withFailureHandler(function(err) {
+          statusEl.textContent = '✕ Error: ' + err.message;
+          statusEl.className = 'status error';
+          saveBtn.textContent = 'Save Settings';
+          saveBtn.disabled = false;
+        })
         .saveSettings(settings);
-    }
-
-    function showStatus(msg, type) {
-      var el = document.getElementById('status');
-      el.textContent = (type === 'success' ? '✓ ' : '✕ ') + msg;
-      el.className = 'status ' + type;
     }
   </script>
 </body>

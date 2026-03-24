@@ -291,7 +291,11 @@ function refreshDashboardStats() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.log);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('No dashboard yet. Generate an invoice first.');
+    try {
+      SpreadsheetApp.getUi().alert('No dashboard yet. Generate an invoice first.');
+    } catch(e) {
+      Logger.log('No dashboard yet. Generate an invoice first.');
+    }
     return;
   }
 
@@ -1067,19 +1071,31 @@ function markAsPaid() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_NAMES.log);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('No invoice dashboard found. Generate an invoice first.');
+    try {
+      SpreadsheetApp.getUi().alert('No invoice dashboard found. Generate an invoice first.');
+    } catch(e) {
+      Logger.log('No invoice dashboard found. Generate an invoice first.');
+    }
     return;
   }
 
   const activeRange = sheet.getActiveRange();
   if (!activeRange) {
-    SpreadsheetApp.getUi().alert('Select a row in the Invoice Dashboard first.');
+    try {
+      SpreadsheetApp.getUi().alert('Select a row in the Invoice Dashboard first.');
+    } catch(e) {
+      Logger.log('Select a row in the Invoice Dashboard first.');
+    }
     return;
   }
 
   const row = activeRange.getRow();
   if (row <= DASHBOARD_HEADER_ROW) {
-    SpreadsheetApp.getUi().alert('Select a data row below the headers.');
+    try {
+      SpreadsheetApp.getUi().alert('Select a data row below the headers.');
+    } catch(e) {
+      Logger.log('Select a data row below the headers.');
+    }
     return;
   }
 
@@ -1087,7 +1103,11 @@ function markAsPaid() {
   const currentStatus = sheet.getRange(row, statusCol).getValue();
 
   if (String(currentStatus).toLowerCase() === 'paid') {
-    SpreadsheetApp.getUi().alert('This invoice is already marked as Paid.');
+    try {
+      SpreadsheetApp.getUi().alert('This invoice is already marked as Paid.');
+    } catch(e) {
+      Logger.log('This invoice is already marked as Paid.');
+    }
     return;
   }
 
@@ -1098,7 +1118,11 @@ function markAsPaid() {
 
   const invoiceNum = sheet.getRange(row, 1).getValue();
   refreshDashboardStats();
-  SpreadsheetApp.getUi().alert('Invoice ' + invoiceNum + ' marked as Paid. Dashboard updated.');
+  try {
+    SpreadsheetApp.getUi().alert('Invoice ' + invoiceNum + ' marked as Paid. Dashboard updated.');
+  } catch(e) {
+    Logger.log('Invoice ' + invoiceNum + ' marked as Paid. Dashboard updated.');
+  }
 }
 
 /**
@@ -1229,14 +1253,18 @@ function initializeSheets() {
     getOrCreateDashboard_(ss);
   }
 
-  SpreadsheetApp.getUi().alert(
-    'Setup Complete',
-    'Your sheets are ready:\n\n' +
-    '\u2022 ' + SHEET_NAMES.log + ' \u2014 Revenue dashboard and invoice log\n' +
-    '\u2022 ' + SHEET_NAMES.clients + ' \u2014 Add your client data here\n\n' +
-    'Next step: Go to \uD83D\uDD77 TAKScripts \u2192 \u2699\uFE0F Settings to configure your business details.',
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
+  try {
+    SpreadsheetApp.getUi().alert(
+      'Setup Complete',
+      'Your sheets are ready:\n\n' +
+      '\u2022 ' + SHEET_NAMES.log + ' \u2014 Revenue dashboard and invoice log\n' +
+      '\u2022 ' + SHEET_NAMES.clients + ' \u2014 Add your client data here\n\n' +
+      'Next step: Go to \uD83D\uDD77 TAKScripts \u2192 \u2699\uFE0F Settings to configure your business details.',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  } catch(e) {
+    Logger.log('Setup Complete');
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1503,13 +1531,13 @@ function getSettingsHtml() {
       </div>
     </div>
 
+    <div id="status" class="status"></div>
+
     <div class="divider"></div>
 
-    <button class="btn btn-primary" onclick="save()">Save Settings</button>
+    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>
     <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>
     <button class="btn btn-init" onclick="initSheets()">Initialize Sheets</button>
-
-    <div id="status" class="status"></div>
   </div>
 
   <script>
@@ -1546,17 +1574,24 @@ function getSettingsHtml() {
       };
 
       var statusEl = document.getElementById('status');
-      statusEl.className = 'status';
-      statusEl.style.display = 'none';
-
+      var saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving\u2026';
       google.script.run
         .withSuccessHandler(function() {
           statusEl.textContent = '\u2713 Settings saved successfully';
           statusEl.className = 'status success';
+          saveBtn.textContent = '\u2713 Saved!';
+          setTimeout(function() {
+            saveBtn.textContent = 'Save Settings';
+            saveBtn.disabled = false;
+          }, 2500);
         })
         .withFailureHandler(function(err) {
           statusEl.textContent = '\u2715 Error: ' + err.message;
           statusEl.className = 'status error';
+          saveBtn.textContent = 'Save Settings';
+          saveBtn.disabled = false;
         })
         .saveSettings(settings);
     }

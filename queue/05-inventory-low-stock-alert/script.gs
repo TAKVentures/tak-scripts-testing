@@ -94,7 +94,11 @@ function viewAlertHistory() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(HISTORY_SHEET_NAME);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('No alert history yet. Run a stock check and alerts will be logged here.');
+    try {
+      SpreadsheetApp.getUi().alert('No alert history yet. Run a stock check and alerts will be logged here.');
+    } catch(e) {
+      Logger.log('No alert history yet. Run a stock check and alerts will be logged here.');
+    }
     return;
   }
   ss.setActiveSheet(sheet);
@@ -119,7 +123,11 @@ function showAbout() {
       '</p>' +
     '</div>'
   ).setWidth(300).setHeight(280);
-  SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
+  try {
+    SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
+  } catch(e) {
+    Logger.log('About TAKScripts');
+  }
 }
 
 
@@ -148,15 +156,22 @@ function saveSettings(settings) {
 function loadSettings() {
   var props = PropertiesService.getScriptProperties();
   var raw = props.getProperty('inv_settings');
-  if (!raw) {
-    return {
-      alertEmail: Session.getActiveUser().getEmail() || '',
-      frequency: 'onedit',
-      enableSupplierEmails: false,
-      thresholdMultiplier: '1.0',
-    };
+  if (!raw) return getDefaultSettings_();
+  var saved = JSON.parse(raw);
+  var defaults = getDefaultSettings_();
+  for (var key in defaults) {
+    if (saved[key] === undefined) saved[key] = defaults[key];
   }
-  return JSON.parse(raw);
+  return saved;
+}
+
+function getDefaultSettings_() {
+  return {
+    alertEmail: Session.getActiveUser().getEmail() || '',
+    frequency: 'onedit',
+    enableSupplierEmails: false,
+    thresholdMultiplier: '1.0',
+  };
 }
 
 
@@ -651,7 +666,11 @@ function checkStockNow() {
       'Alert email sent for ' + result.alerts.length + ' item(s).';
   }
 
-  SpreadsheetApp.getUi().alert(msg);
+  try {
+    SpreadsheetApp.getUi().alert(msg);
+  } catch(e) {
+    Logger.log(msg);
+  }
 }
 
 function testRun() {
@@ -683,7 +702,11 @@ function testRun() {
     lines.push('All products are above reorder level. No alerts needed.');
   }
 
-  SpreadsheetApp.getUi().alert(lines.join('\n'));
+  try {
+    SpreadsheetApp.getUi().alert(lines.join('\n'));
+  } catch(e) {
+    Logger.log(lines.join('\n'));
+  }
 }
 
 /**
@@ -699,12 +722,16 @@ function initialSetup() {
 
   evaluateInventory_(true);
 
-  SpreadsheetApp.getUi().alert(
-    '\u2705 Setup Complete!\n\n' +
-    'Your inventory dashboard is ready with sample data.\n' +
-    'Open \uD83D\uDD77 TAKScripts \u2192 Settings to configure alerts.\n\n' +
-    'Tip: Edit the "Current Stock" column to see live status updates.'
-  );
+  try {
+    SpreadsheetApp.getUi().alert(
+      '\u2705 Setup Complete!\n\n' +
+      'Your inventory dashboard is ready with sample data.\n' +
+      'Open \uD83D\uDD77 TAKScripts \u2192 Settings to configure alerts.\n\n' +
+      'Tip: Edit the "Current Stock" column to see live status updates.'
+    );
+  } catch(e) {
+    Logger.log('\u2705 Setup Complete!\n\nYour inventory dashboard is ready with sample data.\nOpen \uD83D\uDD77 TAKScripts \u2192 Settings to configure alerts.\n\nTip: Edit the "Current Stock" column to see live status updates.');
+  }
 }
 
 function removeTriggers_(functionName) {
@@ -805,9 +832,9 @@ function getSettingsHtml() {
 '      </label>' +
 '    </div>' +
 '    <div class="divider"></div>' +
-'    <button class="btn btn-primary" onclick="save()">Save Settings</button>' +
-'    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>' +
 '    <div id="status" class="status"></div>' +
+'    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>' +
+'    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>' +
 '  </div>' +
 '  <script>' +
 '    google.script.run.withSuccessHandler(function(settings) {' +
@@ -824,10 +851,25 @@ function getSettingsHtml() {
 '        enableSupplierEmails: document.getElementById("enableSupplierEmails").checked' +
 '      };' +
 '      var statusEl = document.getElementById("status");' +
-'      statusEl.className = "status"; statusEl.style.display = "none";' +
+'      var saveBtn = document.getElementById("saveBtn");' +
+'      saveBtn.disabled = true;' +
+'      saveBtn.textContent = "Saving\u2026";' +
 '      google.script.run' +
-'        .withSuccessHandler(function() { statusEl.textContent = "\u2713 Settings saved successfully"; statusEl.className = "status success"; })' +
-'        .withFailureHandler(function(err) { statusEl.textContent = "\u2715 Error: " + err.message; statusEl.className = "status error"; })' +
+'        .withSuccessHandler(function() {' +
+'          statusEl.textContent = "\u2713 Settings saved successfully";' +
+'          statusEl.className = "status success";' +
+'          saveBtn.textContent = "\u2713 Saved!";' +
+'          setTimeout(function() {' +
+'            saveBtn.textContent = "Save Settings";' +
+'            saveBtn.disabled = false;' +
+'          }, 2500);' +
+'        })' +
+'        .withFailureHandler(function(err) {' +
+'          statusEl.textContent = "\u2715 Error: " + err.message;' +
+'          statusEl.className = "status error";' +
+'          saveBtn.textContent = "Save Settings";' +
+'          saveBtn.disabled = false;' +
+'        })' +
 '        .saveSettings(settings);' +
 '    }' +
 '  </script>' +

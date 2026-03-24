@@ -138,7 +138,11 @@ function viewDashboard() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('No dashboard yet. Run "Save Attachments Now" to start tracking attachments.');
+    try {
+      SpreadsheetApp.getUi().alert('No dashboard yet. Run "Save Attachments Now" to start tracking attachments.');
+    } catch(e) {
+      Logger.log('No dashboard yet. Run "Save Attachments Now" to start tracking attachments.');
+    }
     return;
   }
   ss.setActiveSheet(sheet);
@@ -389,7 +393,11 @@ function refreshDashboardStats() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert('No dashboard yet. Run "Save Attachments Now" first.');
+    try {
+      SpreadsheetApp.getUi().alert('No dashboard yet. Run "Save Attachments Now" first.');
+    } catch(e) {
+      Logger.log('No dashboard yet. Run "Save Attachments Now" first.');
+    }
     return;
   }
 
@@ -495,7 +503,11 @@ function saveAttachmentsNow() {
     msg += '\n\nFiles saved to: ' + result.rootFolderName;
     msg += '\nDashboard updated with ' + result.filesSaved + ' new entries.';
   }
-  SpreadsheetApp.getUi().alert(msg);
+  try {
+    SpreadsheetApp.getUi().alert(msg);
+  } catch(e) {
+    Logger.log(msg);
+  }
 }
 
 /**
@@ -537,7 +549,11 @@ function testRun() {
     lines.push('No emails with attachments found matching your search criteria.');
   }
 
-  SpreadsheetApp.getUi().alert(lines.join('\n'));
+  try {
+    SpreadsheetApp.getUi().alert(lines.join('\n'));
+  } catch(e) {
+    Logger.log(lines.join('\n'));
+  }
 }
 
 /**
@@ -1160,7 +1176,11 @@ function updateScheduleTrigger_(schedule) {
  */
 function resetProcessedIds() {
   PropertiesService.getScriptProperties().deleteProperty(PROP_PROCESSED);
-  SpreadsheetApp.getUi().alert('Processed message history cleared. The next run will process all matching emails again.');
+  try {
+    SpreadsheetApp.getUi().alert('Processed message history cleared. The next run will process all matching emails again.');
+  } catch(e) {
+    Logger.log('Processed message history cleared. The next run will process all matching emails again.');
+  }
 }
 
 /**
@@ -1169,7 +1189,11 @@ function resetProcessedIds() {
 function initialSetup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   getOrCreateDashboard_(ss);
-  SpreadsheetApp.getUi().alert('✅ Dashboard created! Use the 🕷 TAKScripts menu to configure settings and start saving attachments.');
+  try {
+    SpreadsheetApp.getUi().alert('✅ Dashboard created! Use the 🕷 TAKScripts menu to configure settings and start saving attachments.');
+  } catch(e) {
+    Logger.log('✅ Dashboard created! Use the 🕷 TAKScripts menu to configure settings and start saving attachments.');
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1224,7 +1248,8 @@ function getSettingsHtml() {
 '    }\n' +
 '    .field input[type="text"],\n' +
 '    .field input[type="number"],\n' +
-'    .field select {\n' +
+'    .field select,\n' +
+'    .field textarea {\n' +
 '      width: 100%;\n' +
 '      padding: 10px 12px;\n' +
 '      border: 1px solid #ddd;\n' +
@@ -1232,9 +1257,10 @@ function getSettingsHtml() {
 '      font-size: 13px;\n' +
 '      font-family: inherit;\n' +
 '      background: white;\n' +
+'      box-sizing: border-box;\n' +
 '      transition: border-color 0.2s;\n' +
 '    }\n' +
-'    .field input:focus, .field select:focus {\n' +
+'    .field input:focus, .field select:focus, .field textarea:focus {\n' +
 '      outline: none;\n' +
 '      border-color: #C9A84C;\n' +
 '      box-shadow: 0 0 0 3px rgba(201,168,76,0.1);\n' +
@@ -1344,7 +1370,7 @@ function getSettingsHtml() {
 '\n' +
 '    <div class="field">\n' +
 '      <label>Senders (optional)</label>\n' +
-'      <textarea id="senders" rows="3" placeholder="accounting@acme.com, invoices@supplier.com, orders@shop.com" style="font-family: inherit; font-size: 12px; resize: vertical;"></textarea>\n' +
+'      <textarea id="senders" rows="4" placeholder="accounting@acme.com, invoices@supplier.com, orders@shop.com" style="resize: vertical;"></textarea>\n' +
 '      <div class="help">Comma-separated. Only save attachments from these senders. Leave blank for all senders.</div>\n' +
 '    </div>\n' +
 '\n' +
@@ -1419,12 +1445,13 @@ function getSettingsHtml() {
 '      </select>\n' +
 '    </div>\n' +
 '\n' +
+'    <div id="status" class="status"></div>\n' +
+'\n' +
 '    <div class="divider"></div>\n' +
 '\n' +
-'    <button class="btn btn-primary" onclick="save()">Save Settings</button>\n' +
+'    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>\n' +
 '    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>\n' +
 '\n' +
-'    <div id="status" class="status"></div>\n' +
 '  </div>\n' +
 '\n' +
 '  <div class="footer">Powered by <a href="https://takscripts.store" target="_blank">TAKScripts</a> · takscripts.store</div>\n' +
@@ -1492,14 +1519,24 @@ function getSettingsHtml() {
 '    }\n' +
 '    function doSave(settings) {\n' +
 '      var statusEl = document.getElementById("status");\n' +
+'      var saveBtn = document.getElementById("saveBtn");\n' +
+'      saveBtn.disabled = true;\n' +
+'      saveBtn.textContent = "Saving…";\n' +
 '      google.script.run\n' +
 '        .withSuccessHandler(function() {\n' +
 '          statusEl.textContent = "✓ Settings saved successfully";\n' +
 '          statusEl.className = "status success";\n' +
+'          saveBtn.textContent = "✓ Saved!";\n' +
+'          setTimeout(function() {\n' +
+'            saveBtn.textContent = "Save Settings";\n' +
+'            saveBtn.disabled = false;\n' +
+'          }, 2500);\n' +
 '        })\n' +
 '        .withFailureHandler(function(err) {\n' +
 '          statusEl.textContent = "✕ Error: " + err.message;\n' +
 '          statusEl.className = "status error";\n' +
+'          saveBtn.textContent = "Save Settings";\n' +
+'          saveBtn.disabled = false;\n' +
 '        })\n' +
 '        .saveSettings(settings);\n' +
 '    }\n' +

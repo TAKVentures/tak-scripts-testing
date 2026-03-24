@@ -939,12 +939,9 @@ function getSettingsHtml_() {
     .btn-primary:hover { background: #C9A84C; color: #1A1A1A; }
     .btn-secondary { background: white; color: #666; border: 1px solid #ddd; margin-top: 8px; }
     .btn-secondary:hover { border-color: #999; color: #333; }
-    .status {
-      text-align: center; padding: 8px; font-size: 12px;
-      margin-top: 8px; border-radius: 6px; display: none;
-    }
-    .status.success { display: block; background: #e8f5e9; color: #2e7d32; }
-    .status.error { display: block; background: #ffebee; color: #c62828; }
+    .status { text-align: center; padding: 8px; font-size: 12px; margin-top: 8px; border-radius: 6px; display: none; }
+    .status.success { display: block; background: #E8F5E9; color: #2E7D32; }
+    .status.error { display: block; background: #FFEBEE; color: #C62828; }
   </style>
 </head>
 <body>
@@ -1025,10 +1022,9 @@ function getSettingsHtml_() {
       <div class="help" style="margin-top: 8px;">Uncheck categories you don't want to track.</div>
     </div>
 
-    <button class="btn btn-primary" onclick="save()">Save Settings</button>
-    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>
-
     <div id="status" class="status"></div>
+    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>
+    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>
   </div>
 
   <script>
@@ -1066,16 +1062,24 @@ function getSettingsHtml_() {
       };
 
       var statusEl = document.getElementById('status');
-      statusEl.style.display = 'none';
-
+      var saveBtn = document.getElementById('saveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving\u2026';
       google.script.run
         .withSuccessHandler(function() {
           statusEl.textContent = '\u2713 Settings saved successfully';
           statusEl.className = 'status success';
+          saveBtn.textContent = '\u2713 Saved!';
+          setTimeout(function() {
+            saveBtn.textContent = 'Save Settings';
+            saveBtn.disabled = false;
+          }, 2500);
         })
         .withFailureHandler(function(err) {
           statusEl.textContent = '\u2715 Error: ' + err.message;
           statusEl.className = 'status error';
+          saveBtn.textContent = 'Save Settings';
+          saveBtn.disabled = false;
         })
         .saveSettings(settings);
     }

@@ -128,7 +128,11 @@ function showAbout() {
       '</p>' +
     '</div>'
   ).setWidth(300).setHeight(300);
-  SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
+  try {
+    SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
+  } catch(e) {
+    Logger.log('About TAKScripts');
+  }
 }
 
 
@@ -827,14 +831,18 @@ function startNudger() {
   writeLog_('Nudger Started', '', '', 'Trigger created, running every ' +
     TRIGGER_INTERVAL_HOURS + ' hour(s)');
 
-  SpreadsheetApp.getUi().alert(
-    '\u2705 Follow-Up Nudger is ACTIVE\n\n' +
-    'Checking every ' + TRIGGER_INTERVAL_HOURS + ' hour(s) for unreplied emails.\n' +
-    'Follow-ups after: ' + settings.daysBeforeFollowUp + ' days\n' +
-    'Auto-send: ' + (settings.autoSend === true || settings.autoSend === 'true' ? 'ON' : 'OFF') + '\n' +
-    'Email digest: ' + (settings.sendDigest === true || settings.sendDigest === 'true' ? 'ON' : 'OFF') + '\n\n' +
-    'To stop: \uD83D\uDD77 TAKScripts \u2192 Stop Follow-Up Nudger'
-  );
+  try {
+    SpreadsheetApp.getUi().alert(
+      '\u2705 Follow-Up Nudger is ACTIVE\n\n' +
+      'Checking every ' + TRIGGER_INTERVAL_HOURS + ' hour(s) for unreplied emails.\n' +
+      'Follow-ups after: ' + settings.daysBeforeFollowUp + ' days\n' +
+      'Auto-send: ' + (settings.autoSend === true || settings.autoSend === 'true' ? 'ON' : 'OFF') + '\n' +
+      'Email digest: ' + (settings.sendDigest === true || settings.sendDigest === 'true' ? 'ON' : 'OFF') + '\n\n' +
+      'To stop: \uD83D\uDD77 TAKScripts \u2192 Stop Follow-Up Nudger'
+    );
+  } catch(e) {
+    Logger.log('\u2705 Follow-Up Nudger is ACTIVE\n\nChecking every ' + TRIGGER_INTERVAL_HOURS + ' hour(s) for unreplied emails.\nFollow-ups after: ' + settings.daysBeforeFollowUp + ' days\nAuto-send: ' + (settings.autoSend === true || settings.autoSend === 'true' ? 'ON' : 'OFF') + '\nEmail digest: ' + (settings.sendDigest === true || settings.sendDigest === 'true' ? 'ON' : 'OFF') + '\n\nTo stop: \uD83D\uDD77 TAKScripts \u2192 Stop Follow-Up Nudger');
+  }
 }
 
 /**
@@ -852,11 +860,15 @@ function stopNudger_(silent) {
   }
   if (!silent) {
     writeLog_('Nudger Stopped', '', '', removed + ' trigger(s) removed');
-    SpreadsheetApp.getUi().alert(
-      '\u23F9 Follow-Up Nudger has been stopped.\n\n' +
-      'No more follow-ups will be sent automatically.\n' +
-      'Your dashboard data has been preserved.'
-    );
+    try {
+      SpreadsheetApp.getUi().alert(
+        '\u23F9 Follow-Up Nudger has been stopped.\n\n' +
+        'No more follow-ups will be sent automatically.\n' +
+        'Your dashboard data has been preserved.'
+      );
+    } catch(e) {
+      Logger.log('\u23F9 Follow-Up Nudger has been stopped.\n\nNo more follow-ups will be sent automatically.\nYour dashboard data has been preserved.');
+    }
   }
 }
 
@@ -954,12 +966,20 @@ function testRun() {
 
     var output = results.join('\n');
     Logger.log(output);
-    SpreadsheetApp.getUi().alert(output);
+    try {
+      SpreadsheetApp.getUi().alert(output);
+    } catch(e) {
+      Logger.log(output);
+    }
 
     writeLog_('Test Run', '', '', pendingCount + ' pending follow-ups found');
 
   } catch (err) {
-    SpreadsheetApp.getUi().alert('Error during test run: ' + err.message);
+    try {
+      SpreadsheetApp.getUi().alert('Error during test run: ' + err.message);
+    } catch(e) {
+      Logger.log('Error during test run: ' + err.message);
+    }
     Logger.log('Test run error: ' + err.message);
   }
 }
@@ -1167,10 +1187,10 @@ function getSettingsHtml() {
 '' +
 '    <div class="divider"></div>' +
 '' +
-'    <button class="btn btn-primary" onclick="save()">Save Settings</button>' +
+'    <div id="status" class="status"></div>' +
+'    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>' +
 '    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>' +
 '' +
-'    <div id="status" class="status"></div>' +
 '  </div>' +
 '' +
 '  <script>' +
@@ -1196,17 +1216,24 @@ function getSettingsHtml() {
 '      };' +
 '' +
 '      var statusEl = document.getElementById("status");' +
-'      statusEl.className = "status";' +
-'      statusEl.style.display = "none";' +
-'' +
+'      var saveBtn = document.getElementById("saveBtn");' +
+'      saveBtn.disabled = true;' +
+'      saveBtn.textContent = "Saving\u2026";' +
 '      google.script.run' +
 '        .withSuccessHandler(function() {' +
 '          statusEl.textContent = "\u2713 Settings saved successfully";' +
 '          statusEl.className = "status success";' +
+'          saveBtn.textContent = "\u2713 Saved!";' +
+'          setTimeout(function() {' +
+'            saveBtn.textContent = "Save Settings";' +
+'            saveBtn.disabled = false;' +
+'          }, 2500);' +
 '        })' +
 '        .withFailureHandler(function(err) {' +
 '          statusEl.textContent = "\u2715 Error: " + err.message;' +
 '          statusEl.className = "status error";' +
+'          saveBtn.textContent = "Save Settings";' +
+'          saveBtn.disabled = false;' +
 '        })' +
 '        .saveSettings(settings);' +
 '    }' +

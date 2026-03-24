@@ -105,9 +105,13 @@ function viewDashboard() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert(
-      'No cleanup history yet.\n\nRun a cleanup to generate dashboard entries.'
-    );
+    try {
+      SpreadsheetApp.getUi().alert(
+        'No cleanup history yet.\n\nRun a cleanup to generate dashboard entries.'
+      );
+    } catch(e) {
+      Logger.log('No cleanup history yet.\n\nRun a cleanup to generate dashboard entries.');
+    }
     return;
   }
   ss.setActiveSheet(sheet);
@@ -132,17 +136,24 @@ function saveSettings(settings) {
 function loadSettings() {
   const props = PropertiesService.getScriptProperties();
   const raw = props.getProperty('cleanup_settings');
-  if (!raw) {
-    return {
-      scope: 'sheet',
-      dateFormat: 'MM/DD/YYYY',
-      phoneFormat: '(XXX) XXX-XXXX',
-      capStyle: 'title',
-      specialCharsKeep: '.,!?@#$%&()-',
-      dupColumns: '',
-    };
+  if (!raw) return getDefaultSettings_();
+  const saved = JSON.parse(raw);
+  const defaults = getDefaultSettings_();
+  for (const key in defaults) {
+    if (saved[key] === undefined) saved[key] = defaults[key];
   }
-  return JSON.parse(raw);
+  return saved;
+}
+
+function getDefaultSettings_() {
+  return {
+    scope: 'sheet',
+    dateFormat: 'MM/DD/YYYY',
+    phoneFormat: '(XXX) XXX-XXXX',
+    capStyle: 'title',
+    specialCharsKeep: '.,!?@#$%&()-',
+    dupColumns: '',
+  };
 }
 
 // ═══════════════════════════════════════════
@@ -187,15 +198,24 @@ function undoFromBackup() {
   }
 
   if (!latestBackup) {
-    ui.alert('No backup found. Run a cleanup first to create a backup.');
+    try {
+      ui.alert('No backup found. Run a cleanup first to create a backup.');
+    } catch(e) {
+      Logger.log('No backup found. Run a cleanup first to create a backup.');
+    }
     return;
   }
 
-  const response = ui.alert(
-    '↩️ Restore Backup',
-    'This will replace the active sheet\'s data with the backup:\n\n"' + latestBackup.getName() + '"\n\nContinue?',
-    ui.ButtonSet.YES_NO
-  );
+  let response;
+  try {
+    response = ui.alert(
+      '↩️ Restore Backup',
+      'This will replace the active sheet\'s data with the backup:\n\n"' + latestBackup.getName() + '"\n\nContinue?',
+      ui.ButtonSet.YES_NO
+    );
+  } catch(e) {
+    Logger.log('↩️ Restore Backup\nThis will replace the active sheet\'s data with the backup:\n\n"' + latestBackup.getName() + '"\n\nContinue?');
+  }
 
   if (response !== ui.Button.YES) return;
 
@@ -217,7 +237,11 @@ function undoFromBackup() {
     activeSheet.getRange(1, 1, backupData.length, backupData[0].length).setFontColors(backupFontColors);
   }
 
-  ui.alert('✅ Backup restored successfully.\n\nYou can delete the backup sheet "' + latestBackup.getName() + '" if you no longer need it.');
+  try {
+    ui.alert('✅ Backup restored successfully.\n\nYou can delete the backup sheet "' + latestBackup.getName() + '" if you no longer need it.');
+  } catch(e) {
+    Logger.log('✅ Backup restored successfully.\n\nYou can delete the backup sheet "' + latestBackup.getName() + '" if you no longer need it.');
+  }
 }
 
 // ═══════════════════════════════════════════

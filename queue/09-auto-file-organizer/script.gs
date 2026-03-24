@@ -195,9 +195,13 @@ function viewActivityLog() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
   if (!sheet) {
-    SpreadsheetApp.getUi().alert(
-      'No activity log yet.\n\nRun "Organize Now" or "Test Run" to generate log entries.'
-    );
+    try {
+      SpreadsheetApp.getUi().alert(
+        'No activity log yet.\n\nRun "Organize Now" or "Test Run" to generate log entries.'
+      );
+    } catch(e) {
+      Logger.log('No activity log yet. Run "Organize Now" or "Test Run" to generate log entries.');
+    }
     return;
   }
   ss.setActiveSheet(sheet);
@@ -298,17 +302,25 @@ function resolveFolderFromUrl(folderUrl) {
 function organizeNow() {
   var result = runOrganizer_(false);
   if (result.error) {
-    SpreadsheetApp.getUi().alert('\u26A0\uFE0F ' + result.error);
+    try {
+      SpreadsheetApp.getUi().alert('\u26A0\uFE0F ' + result.error);
+    } catch(e) {
+      Logger.log(result.error);
+    }
     return;
   }
 
-  SpreadsheetApp.getUi().alert(
-    '\u2705 Organization Complete\n\n' +
-    'Files moved: ' + result.moved + '\n' +
-    'Files skipped (already organized): ' + result.skipped + '\n' +
-    'Errors: ' + result.errors + '\n\n' +
-    'Check the Activity Log for full details.'
-  );
+  try {
+    SpreadsheetApp.getUi().alert(
+      '\u2705 Organization Complete\n\n' +
+      'Files moved: ' + result.moved + '\n' +
+      'Files skipped (already organized): ' + result.skipped + '\n' +
+      'Errors: ' + result.errors + '\n\n' +
+      'Check the Activity Log for full details.'
+    );
+  } catch(e) {
+    Logger.log('Organization Complete. Files moved: ' + result.moved + ', Files skipped: ' + result.skipped + ', Errors: ' + result.errors + '. Check the Activity Log for full details.');
+  }
 }
 
 /**
@@ -317,16 +329,24 @@ function organizeNow() {
 function testRun() {
   var result = runOrganizer_(true);
   if (result.error) {
-    SpreadsheetApp.getUi().alert('\u26A0\uFE0F ' + result.error);
+    try {
+      SpreadsheetApp.getUi().alert('\u26A0\uFE0F ' + result.error);
+    } catch(e) {
+      Logger.log(result.error);
+    }
     return;
   }
 
-  SpreadsheetApp.getUi().alert(
-    '\uD83E\uDDEA TEST RUN \u2014 Preview Only (no files moved)\n\n' +
-    'Files that would be moved: ' + result.moved + '\n' +
-    'Files that would be skipped: ' + result.skipped + '\n\n' +
-    'Check the Activity Log for the full preview.'
-  );
+  try {
+    SpreadsheetApp.getUi().alert(
+      '\uD83E\uDDEA TEST RUN \u2014 Preview Only (no files moved)\n\n' +
+      'Files that would be moved: ' + result.moved + '\n' +
+      'Files that would be skipped: ' + result.skipped + '\n\n' +
+      'Check the Activity Log for the full preview.'
+    );
+  } catch(e) {
+    Logger.log('TEST RUN - Preview Only (no files moved). Files that would be moved: ' + result.moved + ', Files that would be skipped: ' + result.skipped + '. Check the Activity Log for the full preview.');
+  }
 }
 
 /**
@@ -1192,10 +1212,9 @@ function getSettingsHtml() {
 '    <div class="divider"></div>' +
 '' +
 '    <!-- ACTIONS -->' +
-'    <button class="btn btn-primary" onclick="save()">\u2699\uFE0F Save Settings</button>' +
-'    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>' +
-'' +
 '    <div id="status" class="status"></div>' +
+'    <button id="saveBtn" class="btn btn-primary" onclick="save()">\u2699\uFE0F Save Settings</button>' +
+'    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>' +
 '' +
 '    <div class="footer-text">' +
 '      Powered by TAKScripts \u00B7 takscripts.store' +
@@ -1294,12 +1313,25 @@ function getSettingsHtml() {
 '        scheduleFrequency: document.getElementById("scheduleFrequency").value,' +
 '      };' +
 '' +
+'      var statusEl = document.getElementById("status");' +
+'      var saveBtn = document.getElementById("saveBtn");' +
+'      saveBtn.disabled = true;' +
+'      saveBtn.textContent = "Saving\u2026";' +
 '      google.script.run' +
 '        .withSuccessHandler(function() {' +
-'          showStatus("Settings saved successfully!", "success");' +
+'          statusEl.textContent = "\u2713 Settings saved successfully";' +
+'          statusEl.className = "status success";' +
+'          saveBtn.textContent = "\u2713 Saved!";' +
+'          setTimeout(function() {' +
+'            saveBtn.textContent = "Save Settings";' +
+'            saveBtn.disabled = false;' +
+'          }, 2500);' +
 '        })' +
 '        .withFailureHandler(function(err) {' +
-'          showStatus("Error: " + err.message, "error");' +
+'          statusEl.textContent = "\u2715 Error: " + err.message;' +
+'          statusEl.className = "status error";' +
+'          saveBtn.textContent = "Save Settings";' +
+'          saveBtn.disabled = false;' +
 '        })' +
 '        .saveSettings(settings);' +
 '    }' +
