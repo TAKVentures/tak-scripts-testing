@@ -33,9 +33,9 @@ var BRAND = {
   gold: '#C9A84C',
   white: '#FFFFFF',
   lightGray: '#F9F9F9',
-  successBg: '#E8F5E9', successText: '#2E7D32',
-  warningBg: '#FFF8E1', warningText: '#F57F17',
-  errorBg: '#FFEBEE', errorText: '#C62828',
+  successBg: '#E6F4EA', successText: '#137333',
+  warningBg: '#FEF7E0', warningText: '#B06000',
+  errorBg: '#FCE8E6', errorText: '#C5221F',
   headerFont: 'Roboto Mono', bodyFont: 'Roboto',
 };
 
@@ -52,9 +52,9 @@ var COL = {
 var HISTORY_HEADERS = ['Timestamp', 'Product Name', 'SKU', 'Stock Level', 'Reorder Level', 'Action Taken'];
 
 var STATUS = {
-  IN_STOCK:     { label: 'In Stock',     bg: '#E8F5E9', text: '#2E7D32' },
-  LOW_STOCK:    { label: 'Low Stock',    bg: '#FFF8E1', text: '#F57F17' },
-  OUT_OF_STOCK: { label: 'Out of Stock', bg: '#FFEBEE', text: '#C62828' },
+  IN_STOCK:     { label: 'In Stock',     bg: '#E6F4EA', text: '#137333' },
+  LOW_STOCK:    { label: 'Low Stock',    bg: '#FEF7E0', text: '#B06000' },
+  OUT_OF_STOCK: { label: 'Out of Stock', bg: '#FCE8E6', text: '#C5221F' },
 };
 
 
@@ -82,7 +82,7 @@ function onOpen() {
 function showSettings() {
   var html = HtmlService.createHtmlOutput(getSettingsHtml())
     .setTitle('Inventory Alert Settings')
-    .setWidth(360);
+    .setWidth(430);
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
@@ -219,11 +219,11 @@ function getOrCreateDashboard_() {
     .setBackground(BRAND.darkBg)
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(1, 52);
+  sheet.setRowHeight(1, 60);
 
   // ── Row 2: Stat labels ──────────────────────────────────
   sheet.getRange(2, 1, 1, numCols)
-    .setValues([['TOTAL', 'IN STOCK', 'LOW STOCK', 'OUT OF STOCK', 'ALERTS TODAY', '', '', '']])
+    .setValues([['TOTAL', 'IN STOCK', 'LOW STOCK', 'OUT OF STOCK', 'ALERTS TODAY', '', 'LAST RUN', '']])
     .setFontFamily(BRAND.headerFont)
     .setFontSize(8)
     .setFontWeight('normal')
@@ -246,6 +246,11 @@ function getOrCreateDashboard_() {
   sheet.setRowHeight(DASHBOARD_HEADER_ROW, 32);
 
   sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
+
+  // ── Reorder Level column: subtle gold tint to indicate user-editable config ──
+  sheet.getRange(DASHBOARD_HEADER_ROW, COL.REORDER)
+    .setBackground('#3A2E00')
+    .setFontColor('#FFD54F');
 
   // ── Column widths ───────────────────────────────────────
   sheet.setColumnWidth(COL.NAME, 200);
@@ -318,6 +323,8 @@ function refreshDashboardStats(dashboardSheet) {
     }).length;
   }
 
+  var lastRun = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, h:mm a');
+
   sheet.getRange(1, 1, 1, 5).setValues([[
     total || '—',
     inStock || '—',
@@ -325,6 +332,16 @@ function refreshDashboardStats(dashboardSheet) {
     outOfStock || '—',
     alertsToday || '—',
   ]]);
+
+  // Write last-run timestamp to stat value row col 7, label already set in col 7 row 2
+  sheet.getRange(1, 7).setValue(lastRun)
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(11)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground(BRAND.darkBg)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
 }
 
 
@@ -497,13 +514,13 @@ function sendAlertEmail_(settings, alertItems) {
     return;
   }
 
-  var subject = '\uD83D\uDD77 Inventory Alert: ' + alertItems.length + ' item(s) need attention';
+  var subject = '\u26A0\uFE0F Low Stock Alert: ' + alertItems.length + ' item(s) below threshold';
 
   var tableRows = '';
   for (var i = 0; i < alertItems.length; i++) {
     var item = alertItems[i];
-    var statusColor = item.status === 'Out of Stock' ? '#C62828' : '#F57F17';
-    var statusBg = item.status === 'Out of Stock' ? '#FFEBEE' : '#FFF8E1';
+    var statusColor = item.status === 'Out of Stock' ? '#C5221F' : (item.status === 'Low Stock' ? '#B06000' : '#137333');
+    var statusBg = item.status === 'Out of Stock' ? '#FCE8E6' : (item.status === 'Low Stock' ? '#FEF7E0' : '#E6F4EA');
     var rowBg = (i % 2 === 0) ? '#FFFFFF' : '#F9F9F9';
 
     tableRows +=
@@ -526,7 +543,7 @@ function sendAlertEmail_(settings, alertItems) {
 
   var html =
     '<!DOCTYPE html><html><head><meta charset="utf-8"></head>' +
-    '<body style="margin: 0; padding: 0; background: #f4f4f4; font-family: \'Segoe UI\', system-ui, sans-serif;">' +
+    '<body style="margin: 0; padding: 0; background: #f4f4f4; font-family: Arial, Helvetica, sans-serif;">' +
       '<table width="100%" cellpadding="0" cellspacing="0" style="background: #f4f4f4; padding: 24px;">' +
         '<tr><td align="center">' +
           '<table width="600" cellpadding="0" cellspacing="0" style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">' +
@@ -535,8 +552,8 @@ function sendAlertEmail_(settings, alertItems) {
               '<div style="color: #C9A84C; font-family: monospace; font-size: 16px; font-weight: bold; letter-spacing: 1px;">TAKScripts</div>' +
               '<div style="color: #888; font-size: 11px; margin-top: 4px;">Inventory Low-Stock Alert</div>' +
             '</td></tr>' +
-            '<tr><td style="background: #FFF8E1; padding: 16px 24px; border-bottom: 2px solid #F57F17;">' +
-              '<div style="font-size: 14px; font-weight: 600; color: #F57F17;">\u26A0\uFE0F ' + alertItems.length + ' item(s) require attention</div>' +
+            '<tr><td style="background: #FEF7E0; padding: 16px 24px; border-bottom: 2px solid #B06000;">' +
+              '<div style="font-size: 14px; font-weight: 600; color: #B06000;">\u26A0\uFE0F ' + alertItems.length + ' item(s) require attention</div>' +
               '<div style="font-size: 12px; color: #999; margin-top: 4px;">Checked on ' + dateStr + '</div>' +
             '</td></tr>' +
             '<tr><td style="padding: 0;">' +
@@ -615,7 +632,7 @@ function sendSupplierEmails_(alertItems) {
 
     var html =
       '<!DOCTYPE html><html><head><meta charset="utf-8"></head>' +
-      '<body style="margin: 0; padding: 0; background: #f4f4f4; font-family: \'Segoe UI\', system-ui, sans-serif;">' +
+      '<body style="margin: 0; padding: 0; background: #f4f4f4; font-family: Arial, Helvetica, sans-serif;">' +
         '<table width="100%" cellpadding="0" cellspacing="0" style="background: #f4f4f4; padding: 24px;">' +
           '<tr><td align="center">' +
             '<table width="560" cellpadding="0" cellspacing="0" style="background: white; border-radius: 8px; overflow: hidden;">' +
