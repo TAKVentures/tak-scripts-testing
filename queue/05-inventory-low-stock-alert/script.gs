@@ -429,27 +429,22 @@ function evaluateInventory_(dryRun) {
     }
   }
 
-  // FIX 1 + FIX 6: Batch write statuses, backgrounds, and row heights
-  if (numDataRows > 0) {
+  // Batch write statuses, backgrounds, and formatting — skip entirely in dry run
+  if (!dryRun && numDataRows > 0) {
     sheet.getRange(dataStartRow, COL.STATUS, numDataRows, 1).setValues(statusValues);
     sheet.getRange(dataStartRow, 1, numDataRows, lastCol).setBackgrounds(rowBackgrounds);
 
-    // Apply fixed row heights in one loop (one call per row — unavoidable for setRowHeight)
-    for (var r = 0; r < numDataRows; r++) {
-      sheet.setRowHeight(dataStartRow + r, 30);
-    }
+    // Single call for all row heights
+    sheet.setRowHeights(dataStartRow, numDataRows, 30);
 
-    // Apply status column font color, fontWeight, alignment per row
-    for (var r = 0; r < numDataRows; r++) {
-      if (!statusInfoPerRow[r]) continue;
-      var statusCell = sheet.getRange(dataStartRow + r, COL.STATUS);
-      statusCell
-        .setFontColor(statusInfoPerRow[r].text)
-        .setFontWeight('bold')
-        .setHorizontalAlignment('center');
-    }
+    // Batch status column font colors, weights, alignments
+    var fontColors = statusInfoPerRow.map(function(s) { return s ? [s.text] : ['#000000']; });
+    var fontWeights = statusInfoPerRow.map(function(s) { return s ? ['bold'] : ['normal']; });
+    var alignments = statusInfoPerRow.map(function() { return ['center']; });
+    var statusRange = sheet.getRange(dataStartRow, COL.STATUS, numDataRows, 1);
+    statusRange.setFontColors(fontColors).setFontWeights(fontWeights).setHorizontalAlignments(alignments);
 
-    SpreadsheetApp.flush(); // FIX 6
+    SpreadsheetApp.flush();
   }
 
   if (!dryRun && alertItems.length > 0) {
@@ -460,7 +455,7 @@ function evaluateInventory_(dryRun) {
     logAlerts_(alertItems, sheet);
   }
 
-  refreshDashboardStats(sheet);
+  if (!dryRun) refreshDashboardStats(sheet);
 
   return {
     total: counts.total,
