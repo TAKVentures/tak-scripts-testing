@@ -246,3 +246,85 @@ status           = 'live'
 
 Scripts using ES6: `vip-priority-alert`, `data-cleanup-wizard`
 All others: ES5
+
+---
+
+## 12. Sidebar Textarea Width
+
+**Rule:** Always include `textarea` in the `.field` CSS selector so it gets `width: 100%` and `box-sizing: border-box`. Never rely on inline styles for layout.
+
+```css
+.field input[type="text"],
+.field input[type="number"],
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: white;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none;
+  border-color: #C9A84C;
+  box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
+}
+```
+
+**Textarea HTML:** Use `rows="4"` and `style="resize: vertical;"` only (no width/font inline — CSS handles it).
+
+---
+
+## 13. Settings Save Confirmation
+
+**Rule:** The sidebar Save button must give two forms of feedback: the button text changes to "✓ Saved!" for 2.5 seconds, and a green status banner appears above the buttons. The status div goes **above** the divider/buttons — never below them where users won't see it.
+
+**HTML structure:**
+```html
+<div id="status" class="status"></div>
+
+<div class="divider"></div>
+
+<button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>
+<button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>
+```
+
+**CSS:**
+```css
+.status { text-align: center; padding: 8px; font-size: 12px; margin-top: 8px; border-radius: 6px; display: none; }
+.status.success { display: block; background: #E8F5E9; color: #2E7D32; }
+.status.error   { display: block; background: #FFEBEE; color: #C62828; }
+```
+
+**JS `doSave()` pattern:**
+```javascript
+function doSave(settings) {
+  var statusEl = document.getElementById("status");
+  var saveBtn  = document.getElementById("saveBtn");
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Saving…";
+  google.script.run
+    .withSuccessHandler(function() {
+      statusEl.textContent = "✓ Settings saved successfully";
+      statusEl.className = "status success";
+      saveBtn.textContent = "✓ Saved!";
+      setTimeout(function() {
+        saveBtn.textContent = "Save Settings";
+        saveBtn.disabled = false;
+      }, 2500);
+    })
+    .withFailureHandler(function(err) {
+      statusEl.textContent = "✕ Error: " + err.message;
+      statusEl.className = "status error";
+      saveBtn.textContent = "Save Settings";
+      saveBtn.disabled = false;
+    })
+    .saveSettings(settings);
+}
+```
+
+**Applies to:** Every script with a Settings sidebar.
