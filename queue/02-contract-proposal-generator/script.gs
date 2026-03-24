@@ -1038,7 +1038,7 @@ function appendDivider_(body) {
   divCell.setBackgroundColor(BRAND.gold);
   divCell.setPaddingTop(0);
   divCell.setPaddingBottom(0);
-  divCell.getChild(0).asParagraph().setFontSize(1).setText('');
+  divCell.getChild(0).asParagraph().setFontSize(1).setText(' ');
 }
 
 /**
