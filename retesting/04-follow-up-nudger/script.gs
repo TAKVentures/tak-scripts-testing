@@ -305,7 +305,7 @@ function getOrCreateDashboard_() {
   sheet.hideColumns(COL.threadId); // Internal dedup field
 
   // Hide gridlines
-  ss.setHiddenGridlines(true);
+  sheet.setHiddenGridlines(true);
 
   return sheet;
 }
@@ -375,11 +375,15 @@ function refreshDashboardStats() {
   // Ensure LAST RUN label stays in row 3
   sheet.getRange(3, 6).setValue('LAST RUN');
 
-  // Hide resolved rows
-  for (var r = dataStartRow; r <= sheet.getLastRow(); r++) {
-    var statusVal = sheet.getRange(r, COL.status).getValue().toString();
-    if (statusVal.indexOf('Done') !== -1 || statusVal === '\u2713') {
-      sheet.hideRows(r);
+  // Hide resolved rows — batch read status column to avoid per-row API calls
+  var finalLastRow = sheet.getLastRow();
+  if (finalLastRow >= dataStartRow) {
+    var statusVals = sheet.getRange(dataStartRow, COL.status, finalLastRow - dataStartRow + 1, 1).getValues();
+    for (var r = 0; r < statusVals.length; r++) {
+      var sv = statusVals[r][0].toString();
+      if (sv.indexOf('Done') !== -1 || sv === '\u2713') {
+        sheet.hideRows(dataStartRow + r);
+      }
     }
   }
 }
