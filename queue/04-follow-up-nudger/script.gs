@@ -78,6 +78,7 @@ function onOpen() {
     .addSeparator()
     .addItem('\uD83E\uDDEA Test Run (no emails sent)', 'testRun')
     .addItem('\uD83D\uDCCA View Dashboard', 'viewDashboard')
+    .addItem('✓ Mark as Resolved', 'markResolved')
     .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
     .addItem('❓ How to Use', 'showHelp')
@@ -148,8 +149,11 @@ function getDefaultSettings_() {
   return {
     daysBeforeFollowUp: 3,
     maxFollowUps: 2,
+    overdueAfterDays: 5,
+    urgentAfterDays: 7,
     autoSend: false,
     sendDigest: true,
+    triggerIntervalHours: 1,
     excludeDomains: 'noreply, no-reply, notifications, mailer-daemon, newsletter, calendar-notification',
     followUpSubject: 'Re: {{subject}}',
     followUpMessage:
@@ -322,13 +326,47 @@ function refreshDashboardStats() {
 
   var avgWait = pending > 0 ? Math.round(totalWait / pending) : 0;
 
-  sheet.getRange(1, 1, 1, 5).setValues([[
+  var lastRunStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, h:mm a');
+
+  sheet.getRange(1, 1, 1, 6).setValues([[
     pending || '—',
     overdue || '—',
     pending > 0 ? avgWait + 'd' : '—',
     autoSentCount || '—',
     longest > 0 ? longest + 'd' : '—',
+    lastRunStr,
   ]]);
+
+  // Ensure the LAST RUN label is set in row 2
+  sheet.getRange(2, 6).setValue('LAST RUN');
+
+  // Hide resolved rows
+  var dataStartRow = DASHBOARD_HEADER_ROW + 1;
+  var lastRow = sheet.getLastRow();
+  for (var r = dataStartRow; r <= lastRow; r++) {
+    var statusVal = sheet.getRange(r, COL.status).getValue().toString();
+    if (statusVal.indexOf('Done') !== -1 || statusVal === '✓') {
+      sheet.hideRows(r);
+    }
+  }
+}
+
+
+/**
+ * Sets the selected row's status to "Done ✓" and hides it on next refresh.
+ */
+function markResolved() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (!sheet) return;
+  var row = ss.getActiveRange().getRow();
+  if (row <= DASHBOARD_HEADER_ROW) {
+    try { SpreadsheetApp.getUi().alert('Select a data row in the dashboard first.'); } catch(e) { Logger.log('Select a data row in the dashboard first.'); }
+    return;
+  }
+  sheet.getRange(row, COL.status).setValue('Done ✓');
+  sheet.getRange(row, COL.status).setFontColor('#888888');
+  refreshDashboardStats();
 }
 
 
@@ -363,78 +401,90 @@ function runFollowUpCheck() {
     var newlySent = [];
 
     for (var t = 0; t < threads.length; t++) {
-      var thread = threads[t];
-      var threadId = thread.getId();
-      var messages = thread.getMessages();
+      try {
+        var thread = threads[t];
+        var threadId = thread.getId();
+        var allMessages = thread.getMessages();
 
-      var lastSentByMe = null;
-      var lastSentDate = null;
-      for (var m = messages.length - 1; m >= 0; m--) {
-        var msg = messages[m];
-        var fromEmail = extractEmail_(msg.getFrom());
-        if (fromEmail === myEmail) {
-          lastSentByMe = msg;
-          lastSentDate = msg.getDate();
-          break;
+        var lastSentByMe = null;
+        var lastSentDate = null;
+        for (var m = allMessages.length - 1; m >= 0; m--) {
+          var msg = allMessages[m];
+          var fromEmail = extractEmail_(msg.getFrom());
+          if (fromEmail === myEmail) {
+            lastSentByMe = msg;
+            lastSentDate = msg.getDate();
+            break;
+          }
         }
-      }
-      if (!lastSentByMe) continue;
+        if (!lastSentByMe) continue;
 
-      var gotReply = false;
-      for (var r = 0; r < messages.length; r++) {
-        var replyMsg = messages[r];
-        if (replyMsg.getDate() > lastSentDate && extractEmail_(replyMsg.getFrom()) !== myEmail) {
-          gotReply = true;
-          break;
+        // Only look at messages after the sent date to avoid scanning full thread history
+        var messages = allMessages.filter(function(m) {
+          return m.getDate() >= lastSentDate;
+        });
+        // Fall back to full list if filter produces nothing
+        if (messages.length === 0) messages = allMessages;
+
+        var gotReply = false;
+        for (var r = 0; r < messages.length; r++) {
+          var replyMsg = messages[r];
+          if (replyMsg.getDate() > lastSentDate && extractEmail_(replyMsg.getFrom()) !== myEmail) {
+            gotReply = true;
+            break;
+          }
         }
-      }
-      if (gotReply) {
-        markThreadReplied_(threadId);
-        continue;
-      }
-
-      var daysWaiting = Math.floor((now.getTime() - lastSentDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysWaiting < daysThreshold) continue;
-
-      var toField = lastSentByMe.getTo();
-      var recipientEmail = extractEmail_(toField);
-      var recipientName = extractName_(toField);
-      var subject = lastSentByMe.getSubject();
-
-      if (shouldExclude_(recipientEmail, excludeDomains)) continue;
-
-      var currentCount = followUpCounts[threadId] || 0;
-      if (currentCount >= maxFollowUps) continue;
-
-      var item = {
-        threadId: threadId,
-        dateSent: lastSentDate,
-        to: toField,
-        recipientEmail: recipientEmail,
-        recipientName: recipientName,
-        subject: subject,
-        daysWaiting: daysWaiting,
-        followUpsSent: currentCount,
-        thread: thread,
-        lastMessage: lastSentByMe,
-      };
-
-      if (autoSend && !processedIds.has(threadId + '_' + (currentCount + 1))) {
-        try {
-          sendFollowUp_(item, settings);
-          item.followUpsSent = currentCount + 1;
-          incrementFollowUpCount_(threadId);
-          markProcessed_(threadId, currentCount + 1);
-          newlySent.push(item);
-          writeLog_('Follow-Up Sent', recipientEmail, subject,
-            'Auto follow-up #' + item.followUpsSent + ' after ' + daysWaiting + ' days');
-        } catch (sendErr) {
-          Logger.log('Error sending follow-up to ' + recipientEmail + ': ' + sendErr.message);
-          writeLog_('Send Error', recipientEmail, subject, sendErr.message);
+        if (gotReply) {
+          markThreadReplied_(threadId);
+          continue;
         }
-      }
 
-      pendingFollowUps.push(item);
+        var daysWaiting = Math.floor((now.getTime() - lastSentDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysWaiting < daysThreshold) continue;
+
+        var toField = lastSentByMe.getTo();
+        var recipientEmail = extractEmail_(toField);
+        var recipientName = extractName_(toField);
+        var subject = lastSentByMe.getSubject();
+
+        if (shouldExclude_(recipientEmail, excludeDomains)) continue;
+
+        var currentCount = followUpCounts[threadId] || 0;
+        if (currentCount >= maxFollowUps) continue;
+
+        var item = {
+          threadId: threadId,
+          dateSent: lastSentDate,
+          to: toField,
+          recipientEmail: recipientEmail,
+          recipientName: recipientName,
+          subject: subject,
+          daysWaiting: daysWaiting,
+          followUpsSent: currentCount,
+          thread: thread,
+          lastMessage: lastSentByMe,
+        };
+
+        if (autoSend && !processedIds.has(threadId + '_' + (currentCount + 1))) {
+          try {
+            sendFollowUp_(item, settings);
+            item.followUpsSent = currentCount + 1;
+            incrementFollowUpCount_(threadId);
+            markProcessed_(threadId, currentCount + 1);
+            newlySent.push(item);
+            writeLog_('Follow-Up Sent', recipientEmail, subject,
+              'Auto follow-up #' + item.followUpsSent + ' after ' + daysWaiting + ' days');
+          } catch (sendErr) {
+            Logger.log('Error sending follow-up to ' + recipientEmail + ': ' + sendErr.message);
+            writeLog_('Send Error', recipientEmail, subject, sendErr.message);
+          }
+        }
+
+        pendingFollowUps.push(item);
+      } catch (e) {
+        Logger.log('Thread error: ' + e.message);
+      }
+      Utilities.sleep(100);
     }
 
     updateTrackerSheet_(pendingFollowUps);
@@ -489,12 +539,16 @@ function sendDigestEmail_(pending, sent, settings) {
 
   for (var i = 0; i < pending.length; i++) {
     var item = pending[i];
-    var statusColor = item.daysWaiting >= 7 ? '#C62828' :
-                      item.daysWaiting >= 5 ? '#F57F17' : '#2E7D32';
     var wasSent = false;
     for (var s = 0; s < sent.length; s++) {
       if (sent[s].threadId === item.threadId) { wasSent = true; break; }
     }
+
+    var statusColor = item.daysWaiting >= settings.urgentAfterDays ? '#C62828' :
+                      item.daysWaiting >= settings.overdueAfterDays ? '#E65100' : '#1565C0';
+    var statusLabel = item.daysWaiting >= settings.urgentAfterDays ? 'Urgent' :
+                      item.daysWaiting >= settings.overdueAfterDays ? 'Overdue' : 'Pending';
+    var statusBadge = '<span style="background:' + statusColor + ';color:white;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">' + statusLabel + '</span>';
 
     rows +=
       '<tr style="border-bottom: 1px solid #eee;">' +
@@ -502,6 +556,7 @@ function sendDigestEmail_(pending, sent, settings) {
         '<td style="padding: 10px 12px; font-size: 13px;">' + escapeHtml_(item.subject) + '</td>' +
         '<td style="padding: 10px 12px; text-align: center; font-weight: 600; color: ' + statusColor + ';">' +
           item.daysWaiting + ' days</td>' +
+        '<td style="padding: 10px 12px; text-align: center;">' + statusBadge + '</td>' +
         '<td style="padding: 10px 12px; text-align: center; font-size: 13px;">' +
           (wasSent ? '\u2705 Sent' : '\u23F3 Pending') + '</td>' +
       '</tr>';
@@ -519,6 +574,7 @@ function sendDigestEmail_(pending, sent, settings) {
             '<th style="padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #666;">To</th>' +
             '<th style="padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #666;">Subject</th>' +
             '<th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase; color: #666;">Waiting</th>' +
+            '<th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase; color: #666;">Status</th>' +
             '<th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase; color: #666;">Follow-Up</th>' +
           '</tr>' +
         '</thead>' +
@@ -598,11 +654,12 @@ function updateTrackerSheet_(items) {
   }
 
   // Write data rows
+  var settings = loadSettings();
   var data = [];
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
-    var status = item.daysWaiting >= 7 ? 'Urgent' :
-                 item.daysWaiting >= 5 ? 'Overdue' : 'Pending';
+    var status = item.daysWaiting >= settings.urgentAfterDays ? 'Urgent' :
+                 item.daysWaiting >= settings.overdueAfterDays ? 'Overdue' : 'Pending';
     var followUpText = item.followUpsSent > 0 ?
       'Yes (' + item.followUpsSent + ')' : 'No';
 
@@ -672,11 +729,12 @@ function styleDataRow_(sheet, rowNum, rowData) {
   statusCell.setFontWeight('bold').setHorizontalAlignment('center');
 
   // Days Waiting cell (col 4) — color-coded by urgency
+  var rowSettings = loadSettings();
   var daysWaiting = parseInt(rowData[COL.daysWaiting - 1], 10) || 0;
   var daysCell = sheet.getRange(rowNum, COL.daysWaiting);
-  if (daysWaiting >= 7) {
+  if (daysWaiting >= rowSettings.urgentAfterDays) {
     daysCell.setBackground(BRAND.errorBg).setFontColor(BRAND.errorText).setFontWeight('bold');
-  } else if (daysWaiting >= 5) {
+  } else if (daysWaiting >= rowSettings.overdueAfterDays) {
     daysCell.setBackground(BRAND.warningBg).setFontColor(BRAND.warningText).setFontWeight('bold');
   }
   daysCell.setHorizontalAlignment('center');
@@ -746,7 +804,12 @@ function markProcessed_(threadId, count) {
   var processed = getProcessedThreadIds_();
   processed.add(threadId + '_' + count);
   var props = PropertiesService.getScriptProperties();
-  props.setProperty('nudger_processed', JSON.stringify(processed.toArray()));
+  var arr = processed.toArray();
+  var MAX_IDS = 3000;
+  if (arr.length > MAX_IDS) {
+    arr = arr.slice(arr.length - MAX_IDS);
+  }
+  props.setProperty('nudger_processed', JSON.stringify(arr));
 }
 
 function getFollowUpCounts_() {
@@ -794,8 +857,9 @@ function parseExcludeDomains_(domainsStr) {
 }
 
 function shouldExclude_(email, excludeDomains) {
+  var emailDomain = email.split('@')[1] || '';
   for (var i = 0; i < excludeDomains.length; i++) {
-    if (email.indexOf(excludeDomains[i]) !== -1) return true;
+    if (emailDomain === excludeDomains[i] || email === excludeDomains[i]) return true;
   }
   return false;
 }
@@ -822,27 +886,28 @@ function startNudger() {
 
   stopNudger_(true);
 
+  var intervalHours = settings.triggerIntervalHours || 1;
   ScriptApp.newTrigger(TRIGGER_FUNCTION)
     .timeBased()
-    .everyHours(TRIGGER_INTERVAL_HOURS)
+    .everyHours(intervalHours)
     .create();
 
   runFollowUpCheck();
 
   writeLog_('Nudger Started', '', '', 'Trigger created, running every ' +
-    TRIGGER_INTERVAL_HOURS + ' hour(s)');
+    intervalHours + ' hour(s)');
 
   try {
     SpreadsheetApp.getUi().alert(
       '\u2705 Follow-Up Nudger is ACTIVE\n\n' +
-      'Checking every ' + TRIGGER_INTERVAL_HOURS + ' hour(s) for unreplied emails.\n' +
+      'Checking every ' + intervalHours + ' hour(s) for unreplied emails.\n' +
       'Follow-ups after: ' + settings.daysBeforeFollowUp + ' days\n' +
       'Auto-send: ' + (settings.autoSend === true || settings.autoSend === 'true' ? 'ON' : 'OFF') + '\n' +
       'Email digest: ' + (settings.sendDigest === true || settings.sendDigest === 'true' ? 'ON' : 'OFF') + '\n\n' +
       'To stop: \uD83D\uDD77 TAKScripts \u2192 Stop Follow-Up Nudger'
     );
   } catch(e) {
-    Logger.log('\u2705 Follow-Up Nudger is ACTIVE\n\nChecking every ' + TRIGGER_INTERVAL_HOURS + ' hour(s) for unreplied emails.\nFollow-ups after: ' + settings.daysBeforeFollowUp + ' days\nAuto-send: ' + (settings.autoSend === true || settings.autoSend === 'true' ? 'ON' : 'OFF') + '\nEmail digest: ' + (settings.sendDigest === true || settings.sendDigest === 'true' ? 'ON' : 'OFF') + '\n\nTo stop: \uD83D\uDD77 TAKScripts \u2192 Stop Follow-Up Nudger');
+    Logger.log('\u2705 Follow-Up Nudger is ACTIVE\n\nChecking every ' + intervalHours + ' hour(s) for unreplied emails.\nFollow-ups after: ' + settings.daysBeforeFollowUp + ' days\nAuto-send: ' + (settings.autoSend === true || settings.autoSend === 'true' ? 'ON' : 'OFF') + '\nEmail digest: ' + (settings.sendDigest === true || settings.sendDigest === 'true' ? 'ON' : 'OFF') + '\n\nTo stop: \uD83D\uDD77 TAKScripts \u2192 Stop Follow-Up Nudger');
   }
 }
 
@@ -878,6 +943,30 @@ function stopNudger_(silent) {
  */
 function stopNudger() {
   stopNudger_(false);
+}
+
+/**
+ * Displays test run results in a sidebar to avoid alert truncation.
+ * @param {string} output - Plain-text output to display.
+ */
+function showTestResultsSidebar_(output) {
+  var escaped = output
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>');
+  var html = '<!DOCTYPE html><html><head><style>' +
+    '* { box-sizing: border-box; margin: 0; padding: 0; }' +
+    'body { font-family: Roboto, Arial, sans-serif; font-size: 12px; color: #333; background: #f9f9f9; }' +
+    '.header { background: #1A1A1A; color: white; padding: 16px; text-align: center; }' +
+    '.header h2 { font-size: 14px; font-weight: 600; color: #C9A84C; }' +
+    '.content { padding: 16px; line-height: 1.6; }' +
+    '</style></head><body>' +
+    '<div class="header"><h2>🧪 Test Run Results</h2></div>' +
+    '<div class="content">' + escaped + '</div>' +
+    '</body></html>';
+  var panel = HtmlService.createHtmlOutput(html).setTitle('Test Run Results').setWidth(400);
+  SpreadsheetApp.getUi().showSidebar(panel);
 }
 
 /**
@@ -968,9 +1057,9 @@ function testRun() {
     var output = results.join('\n');
     Logger.log(output);
     try {
-      SpreadsheetApp.getUi().alert(output);
+      showTestResultsSidebar_(output);
     } catch(e) {
-      Logger.log(output);
+      Logger.log('Sidebar display skipped: ' + e.message);
     }
 
     writeLog_('Test Run', '', '', pendingCount + ' pending follow-ups found');
@@ -1160,6 +1249,40 @@ function getSettingsHtml() {
 '      </label>' +
 '    </div>' +
 '' +
+'    <div class="toggle-wrap">' +
+'      <div>' +
+'        <div class="label">Auto-Schedule</div>' +
+'        <div class="sublabel">Run on a recurring trigger</div>' +
+'      </div>' +
+'      <label class="switch">' +
+'        <input type="checkbox" id="autoSchedule" onchange="toggleIntervalField()" />' +
+'        <span class="slider"></span>' +
+'      </label>' +
+'    </div>' +
+'' +
+'    <div class="field" id="intervalField" style="display: none;">' +
+'      <label>Run Every</label>' +
+'      <select id="triggerIntervalHours">' +
+'        <option value="1">Every hour</option>' +
+'        <option value="6">Every 6 hours</option>' +
+'        <option value="12">Every 12 hours</option>' +
+'        <option value="24">Once a day</option>' +
+'      </select>' +
+'    </div>' +
+'' +
+'    <div class="section-title">Urgency Thresholds</div>' +
+'' +
+'    <div class="field">' +
+'      <label>Overdue After (days)</label>' +
+'      <input type="number" id="overdueAfterDays" min="1" max="30" value="5" />' +
+'      <div class="help">Emails waiting this many days are marked Overdue</div>' +
+'    </div>' +
+'    <div class="field">' +
+'      <label>Urgent After (days)</label>' +
+'      <input type="number" id="urgentAfterDays" min="1" max="60" value="7" />' +
+'      <div class="help">Emails waiting this many days are marked Urgent</div>' +
+'    </div>' +
+'' +
 '    <div class="section-title">Follow-Up Message</div>' +
 '' +
 '    <div class="field">' +
@@ -1198,19 +1321,31 @@ function getSettingsHtml() {
 '    google.script.run.withSuccessHandler(function(settings) {' +
 '      document.getElementById("daysBeforeFollowUp").value = settings.daysBeforeFollowUp || 3;' +
 '      document.getElementById("maxFollowUps").value = settings.maxFollowUps || 2;' +
+'      document.getElementById("overdueAfterDays").value = settings.overdueAfterDays || 5;' +
+'      document.getElementById("urgentAfterDays").value = settings.urgentAfterDays || 7;' +
 '      document.getElementById("autoSend").checked = settings.autoSend === true || settings.autoSend === "true";' +
 '      document.getElementById("sendDigest").checked = settings.sendDigest !== false && settings.sendDigest !== "false";' +
 '      document.getElementById("followUpSubject").value = settings.followUpSubject || "";' +
 '      document.getElementById("followUpMessage").value = settings.followUpMessage || "";' +
 '      document.getElementById("excludeDomains").value = settings.excludeDomains || "";' +
+'      var intervalHours = settings.triggerIntervalHours || 1;' +
+'      document.getElementById("triggerIntervalHours").value = String(intervalHours);' +
 '    }).loadSettings();' +
+'' +
+'    function toggleIntervalField() {' +
+'      var checked = document.getElementById("autoSchedule").checked;' +
+'      document.getElementById("intervalField").style.display = checked ? "block" : "none";' +
+'    }' +
 '' +
 '    function save() {' +
 '      var settings = {' +
 '        daysBeforeFollowUp: parseInt(document.getElementById("daysBeforeFollowUp").value, 10) || 3,' +
 '        maxFollowUps: parseInt(document.getElementById("maxFollowUps").value, 10) || 2,' +
+'        overdueAfterDays: parseInt(document.getElementById("overdueAfterDays").value, 10) || 5,' +
+'        urgentAfterDays: parseInt(document.getElementById("urgentAfterDays").value, 10) || 7,' +
 '        autoSend: document.getElementById("autoSend").checked,' +
 '        sendDigest: document.getElementById("sendDigest").checked,' +
+'        triggerIntervalHours: parseInt(document.getElementById("triggerIntervalHours").value, 10) || 1,' +
 '        followUpSubject: document.getElementById("followUpSubject").value,' +
 '        followUpMessage: document.getElementById("followUpMessage").value,' +
 '        excludeDomains: document.getElementById("excludeDomains").value,' +
