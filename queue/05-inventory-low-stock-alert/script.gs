@@ -72,6 +72,7 @@ function onOpen() {
     .addItem('\uD83D\uDCCA View Dashboard', 'viewDashboard')
     .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addItem('\uD83D\uDCCB View Alert History', 'viewAlertHistory')
+    .addItem('\uD83D\uDDD1 Clear Old History', 'clearOldAlerts')
     .addSeparator()
     .addItem('❓ How to Use', 'showHelp')
     .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
@@ -98,7 +99,7 @@ function viewAlertHistory() {
     try {
       SpreadsheetApp.getUi().alert('No alert history yet. Run a stock check and alerts will be logged here.');
     } catch(e) {
-      Logger.log('No alert history yet. Run a stock check and alerts will be logged here.');
+      console.log('No alert history yet. Run a stock check and alerts will be logged here.');
     }
     return;
   }
@@ -127,7 +128,7 @@ function showAbout() {
   try {
     SpreadsheetApp.getUi().showModalDialog(html, 'About TAKScripts');
   } catch(e) {
-    Logger.log('About TAKScripts');
+    console.log('About TAKScripts');
   }
 }
 
@@ -148,7 +149,7 @@ function saveSettings(settings) {
       ScriptApp.newTrigger('scheduledStockCheck').timeBased().everyDays(1).atHour(8).create();
     }
   } catch (e) {
-    Logger.log('Trigger update skipped: ' + e.message);
+    console.log('Trigger update skipped: ' + e.message);
   }
 
   return { success: true };
@@ -275,9 +276,10 @@ function getOrCreateDashboard_() {
 
 /**
  * Recalculates all stats from current data and history, then updates the stats bar.
+ * @param {Sheet=} dashboardSheet Optional pre-fetched dashboard sheet reference.
  */
-function refreshDashboardStats() {
-  var sheet = getOrCreateDashboard_();
+function refreshDashboardStats(dashboardSheet) {
+  var sheet = dashboardSheet || getOrCreateDashboard_();
   var dataStartRow = DASHBOARD_HEADER_ROW + 1;
   var lastRow = sheet.getLastRow();
 
@@ -301,22 +303,19 @@ function refreshDashboardStats() {
     }
   }
 
-  // Count today's alerts from history sheet
+  // FIX 3: Count today's alerts using a single getValues() + in-memory filter
   var alertsToday = 0;
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var histSheet = ss.getSheetByName(HISTORY_SHEET_NAME);
+  var histSheet = ss.getSheetByName(HISTORY_SHEET_NAME) || ss.getSheetByName('Alert History');
   if (histSheet && histSheet.getLastRow() > 1) {
-    var today = new Date();
     var histData = histSheet.getRange(2, 1, histSheet.getLastRow() - 1, 1).getValues();
-    for (var h = 0; h < histData.length; h++) {
-      var ts = histData[h][0];
-      if (ts instanceof Date &&
-          ts.getDate() === today.getDate() &&
-          ts.getMonth() === today.getMonth() &&
-          ts.getFullYear() === today.getFullYear()) {
-        alertsToday++;
-      }
-    }
+    var today = new Date();
+    alertsToday = histData.filter(function(row) {
+      var d = new Date(row[0]);
+      return d.getFullYear() === today.getFullYear() &&
+             d.getMonth() === today.getMonth() &&
+             d.getDate() === today.getDate();
+    }).length;
   }
 
   sheet.getRange(1, 1, 1, 5).setValues([[
@@ -357,10 +356,23 @@ function evaluateInventory_(dryRun) {
   var counts = { total: 0, inStock: 0, lowStock: 0, outOfStock: 0 };
   var alertItems = [];
 
+  // FIX 1: Declare batch arrays before the loop
+  var numDataRows = lastRow - dataStartRow + 1;
+  var statusValues = [];
+  var rowBackgrounds = [];
+  var lastCol = HEADERS.length;
+  var statusInfoPerRow = []; // track per-row status for font color pass
+
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
     var name = row[COL.NAME - 1];
-    if (!name) continue;
+    if (!name) {
+      // Push placeholder so array indices align with sheet rows
+      statusValues.push(['']);
+      rowBackgrounds.push(new Array(lastCol).fill(BRAND.white));
+      statusInfoPerRow.push(null);
+      continue;
+    }
 
     var stock = Number(row[COL.STOCK - 1]) || 0;
     var reorder = Number(row[COL.REORDER - 1]) || 0;
@@ -382,29 +394,26 @@ function evaluateInventory_(dryRun) {
     }
     counts.total++;
 
-    var actualRow = dataStartRow + i;
-
-    // Alternating row background (skip status column)
+    // Determine row background (data columns only, status col handled separately)
     var rowBg = (i % 2 === 0) ? BRAND.white : BRAND.lightGray;
-    sheet.getRange(actualRow, 1, 1, COL.STATUS - 1).setBackground(rowBg);
-    sheet.setRowHeight(actualRow, 30);
-
-    // Status cell
-    sheet.getRange(actualRow, COL.STATUS)
-      .setValue(status.label)
-      .setBackground(status.bg)
-      .setFontColor(status.text)
-      .setFontWeight('bold')
-      .setHorizontalAlignment('center');
-
-    // Highlight entire row red/amber for out of stock / low stock
     if (stock <= 0) {
-      sheet.getRange(actualRow, 1, 1, COL.STATUS - 1)
-        .setBackground(BRAND.errorBg);
+      rowBg = BRAND.errorBg;
     } else if (stock <= threshold) {
-      sheet.getRange(actualRow, 1, 1, COL.STATUS - 1)
-        .setBackground(BRAND.warningBg);
+      rowBg = BRAND.warningBg;
     }
+
+    // Build background array for the full row (data cols + status col)
+    var bgRow = [];
+    for (var c = 0; c < lastCol; c++) {
+      if (c === COL.STATUS - 1) {
+        bgRow.push(status.bg);
+      } else {
+        bgRow.push(rowBg);
+      }
+    }
+    rowBackgrounds.push(bgRow);
+    statusValues.push([status.label]);
+    statusInfoPerRow.push(status);
 
     if (status.label !== STATUS.IN_STOCK.label) {
       alertItems.push({
@@ -420,15 +429,38 @@ function evaluateInventory_(dryRun) {
     }
   }
 
+  // FIX 1 + FIX 6: Batch write statuses, backgrounds, and row heights
+  if (numDataRows > 0) {
+    sheet.getRange(dataStartRow, COL.STATUS, numDataRows, 1).setValues(statusValues);
+    sheet.getRange(dataStartRow, 1, numDataRows, lastCol).setBackgrounds(rowBackgrounds);
+
+    // Apply fixed row heights in one loop (one call per row — unavoidable for setRowHeight)
+    for (var r = 0; r < numDataRows; r++) {
+      sheet.setRowHeight(dataStartRow + r, 30);
+    }
+
+    // Apply status column font color, fontWeight, alignment per row
+    for (var r = 0; r < numDataRows; r++) {
+      if (!statusInfoPerRow[r]) continue;
+      var statusCell = sheet.getRange(dataStartRow + r, COL.STATUS);
+      statusCell
+        .setFontColor(statusInfoPerRow[r].text)
+        .setFontWeight('bold')
+        .setHorizontalAlignment('center');
+    }
+
+    SpreadsheetApp.flush(); // FIX 6
+  }
+
   if (!dryRun && alertItems.length > 0) {
     sendAlertEmail_(settings, alertItems);
     if (settings.enableSupplierEmails) {
       sendSupplierEmails_(alertItems);
     }
-    logAlerts_(alertItems);
+    logAlerts_(alertItems, sheet);
   }
 
-  refreshDashboardStats();
+  refreshDashboardStats(sheet);
 
   return {
     total: counts.total,
@@ -444,9 +476,31 @@ function evaluateInventory_(dryRun) {
 // EMAIL ALERTS
 // ═══════════════════════════════════════════
 
+/**
+ * FIX 5: Validates a basic email address format.
+ * @param {string} email
+ * @return {boolean}
+ */
+function isValidEmail_(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
 function sendAlertEmail_(settings, alertItems) {
   var email = settings.alertEmail;
   if (!email) return;
+
+  // FIX 5: Validate email format before attempting send
+  if (!isValidEmail_(email)) {
+    console.log('Skipping invalid email address: ' + email);
+    return;
+  }
+
+  // FIX 8: Check quota before sending
+  var remainingQuota = MailApp.getRemainingDailyQuota();
+  if (remainingQuota < 1) {
+    console.log('Daily email quota exhausted. Skipping email alerts.');
+    return;
+  }
 
   var subject = '\uD83D\uDD77 Inventory Alert: ' + alertItems.length + ' item(s) need attention';
 
@@ -516,19 +570,42 @@ function sendAlertEmail_(settings, alertItems) {
 }
 
 function sendSupplierEmails_(alertItems) {
+  // FIX 8: Check quota before starting the batch
+  var remainingQuota = MailApp.getRemainingDailyQuota();
+  if (remainingQuota < 1) {
+    console.log('Daily email quota exhausted. Skipping email alerts.');
+    return;
+  }
+
   var bySupplier = {};
   for (var i = 0; i < alertItems.length; i++) {
     var item = alertItems[i];
     var email = item.supplierEmail;
     if (!email) continue;
+    // FIX 5: Validate supplier email format before queuing
+    if (!isValidEmail_(email)) {
+      console.log('Skipping invalid email address: ' + email);
+      continue;
+    }
     if (!bySupplier[email]) {
       bySupplier[email] = { supplier: item.supplier, items: [] };
     }
     bySupplier[email].items.push(item);
   }
 
-  for (var supplierEmail in bySupplier) {
+  var supplierKeys = Object.keys(bySupplier);
+  var total = supplierKeys.length;
+  var sentCount = 0;
+
+  for (var si = 0; si < supplierKeys.length; si++) {
+    var supplierEmail = supplierKeys[si];
     var group = bySupplier[supplierEmail];
+
+    // FIX 8: Check quota before each send in the loop
+    if (MailApp.getRemainingDailyQuota() < 1) {
+      console.log('Email quota reached mid-batch. Sent ' + sentCount + ' of ' + total + ' emails.');
+      break;
+    }
     var itemList = '';
     for (var j = 0; j < group.items.length; j++) {
       var it = group.items[j];
@@ -576,6 +653,7 @@ function sendSupplierEmails_(alertItems) {
       htmlBody: html,
       name: 'Reorder Request',
     });
+    sentCount++;
   }
 }
 
@@ -584,7 +662,7 @@ function sendSupplierEmails_(alertItems) {
 // ALERT HISTORY
 // ═══════════════════════════════════════════
 
-function logAlerts_(alertItems) {
+function logAlerts_(alertItems, dashboardSheet) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(HISTORY_SHEET_NAME);
 
@@ -623,6 +701,56 @@ function logAlerts_(alertItems) {
       .setFontFamily(BRAND.bodyFont)
       .setFontSize(10);
   }
+
+  SpreadsheetApp.flush(); // FIX 6: commit writes before any subsequent reads
+
+  // FIX 10: Prune history older than 90 days
+  var histSheet = sheet; // sheet is already the Alert History sheet
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  var histLastRow = histSheet.getLastRow();
+  var histDataStart = 2;
+  if (histLastRow >= histDataStart) {
+    var histDates = histSheet.getRange(histDataStart, 1, histLastRow - histDataStart + 1, 1).getValues();
+    var firstKeep = histDataStart;
+    for (var p = 0; p < histDates.length; p++) {
+      if (new Date(histDates[p][0]) < cutoff) {
+        firstKeep = histDataStart + p + 1;
+      } else {
+        break;
+      }
+    }
+    if (firstKeep > histDataStart) {
+      histSheet.deleteRows(histDataStart, firstKeep - histDataStart);
+    }
+  }
+}
+
+
+/**
+ * FIX 10: Manually clear alert history entries older than 90 days.
+ * Accessible from the TAKScripts menu.
+ */
+function clearOldAlerts() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var histSheet = ss.getSheetByName(HISTORY_SHEET_NAME) || ss.getSheetByName('Alert History');
+  if (!histSheet) return;
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  var lastRow = histSheet.getLastRow();
+  if (lastRow < 2) return;
+  var dates = histSheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  var toDelete = 0;
+  for (var i = 0; i < dates.length; i++) {
+    if (new Date(dates[i][0]) < cutoff) toDelete++;
+    else break;
+  }
+  if (toDelete > 0) histSheet.deleteRows(2, toDelete);
+  try {
+    SpreadsheetApp.getUi().alert('Removed ' + toDelete + ' entries older than 90 days.');
+  } catch(e) {
+    console.log('Removed ' + toDelete + ' old entries.');
+  }
 }
 
 
@@ -632,20 +760,79 @@ function logAlerts_(alertItems) {
 
 /**
  * Fires instantly when a user changes a cell on the inventory sheet.
- * Only reacts to changes in the Current Stock column.
+ * FIX 4: Only re-evaluates the single changed row instead of the full sheet.
  */
 function onEdit(e) {
   if (!e || !e.range) return;
-
   var sheet = e.range.getSheet();
-  if (sheet.getName() !== DASHBOARD_SHEET_NAME) return;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var settings = loadSettings();
+  var inventorySheetName = settings.sheetName || DASHBOARD_SHEET_NAME;
+  if (sheet.getName() !== inventorySheetName) return;
 
-  var col = e.range.getColumn();
+  var stockCol = settings.stockCol
+    ? settings.stockCol.toUpperCase().charCodeAt(0) - 64
+    : COL.STOCK;
+  if (e.range.getColumn() !== stockCol) return;
+
   var row = e.range.getRow();
+  var headerRow = settings.headerRow || DASHBOARD_HEADER_ROW;
+  if (row <= headerRow) return;
 
-  if (col !== COL.STOCK || row <= DASHBOARD_HEADER_ROW) return;
+  // FIX 4: Re-evaluate only this row
+  evaluateSingleRow_(sheet, row, settings);
+}
 
-  evaluateInventory_(false);
+/**
+ * Evaluates and updates status/background for a single inventory row.
+ * @param {Sheet} sheet The inventory/dashboard sheet.
+ * @param {number} row 1-based row index.
+ * @param {Object} settings Loaded settings object.
+ */
+function evaluateSingleRow_(sheet, row, settings) {
+  var multiplier = parseFloat(settings.thresholdMultiplier) || 1.0;
+  var rowData = sheet.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+
+  var name = rowData[COL.NAME - 1];
+  if (!name) return;
+
+  var stock = Number(rowData[COL.STOCK - 1]) || 0;
+  var reorder = Number(rowData[COL.REORDER - 1]) || 0;
+  var threshold = Math.ceil(reorder * multiplier);
+
+  var status;
+  if (stock <= 0) {
+    status = STATUS.OUT_OF_STOCK;
+  } else if (stock <= threshold) {
+    status = STATUS.LOW_STOCK;
+  } else {
+    status = STATUS.IN_STOCK;
+  }
+
+  // Determine data-column background
+  var rowBg = BRAND.white;
+  if (stock <= 0) {
+    rowBg = BRAND.errorBg;
+  } else if (stock <= threshold) {
+    rowBg = BRAND.warningBg;
+  }
+
+  // Batch-write backgrounds for the full row
+  var bgRow = [];
+  for (var c = 0; c < HEADERS.length; c++) {
+    bgRow.push(c === COL.STATUS - 1 ? status.bg : rowBg);
+  }
+  sheet.getRange(row, 1, 1, HEADERS.length).setBackgrounds([bgRow]);
+  sheet.setRowHeight(row, 30);
+
+  // Status cell
+  sheet.getRange(row, COL.STATUS)
+    .setValue(status.label)
+    .setFontColor(status.text)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+
+  SpreadsheetApp.flush();
 }
 
 function scheduledStockCheck() {
@@ -670,7 +857,7 @@ function checkStockNow() {
   try {
     SpreadsheetApp.getUi().alert(msg);
   } catch(e) {
-    Logger.log(msg);
+    console.log(msg);
   }
 }
 
@@ -706,7 +893,7 @@ function testRun() {
   try {
     SpreadsheetApp.getUi().alert(lines.join('\n'));
   } catch(e) {
-    Logger.log(lines.join('\n'));
+    console.log(lines.join('\n'));
   }
 }
 
@@ -731,7 +918,7 @@ function initialSetup() {
       'Tip: Edit the "Current Stock" column to see live status updates.'
     );
   } catch(e) {
-    Logger.log('\u2705 Setup Complete!\n\nYour inventory dashboard is ready with sample data.\nOpen \uD83D\uDD77 TAKScripts \u2192 Settings to configure alerts.\n\nTip: Edit the "Current Stock" column to see live status updates.');
+    console.log('\u2705 Setup Complete!\n\nYour inventory dashboard is ready with sample data.\nOpen \uD83D\uDD77 TAKScripts \u2192 Settings to configure alerts.\n\nTip: Edit the "Current Stock" column to see live status updates.');
   }
 }
 
@@ -820,7 +1007,7 @@ function getSettingsHtml() {
 '        <option value="1.5">1.5x (50% above reorder)</option>' +
 '        <option value="2.0">2.0x (double reorder level)</option>' +
 '      </select>' +
-'      <div class="help">Get alerted earlier by raising the threshold above the reorder level.</div>' +
+'      <div class="help">Multiplier applied to your reorder level. 1.0 = alert exactly at reorder point. 1.2 = alert when stock drops to 120% of reorder level (earlier warning). Leave at 1.0 to alert at the exact threshold.</div>' +
 '    </div>' +
 '    <div class="toggle-row">' +
 '      <div>' +
