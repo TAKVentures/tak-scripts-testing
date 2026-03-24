@@ -26,7 +26,7 @@
 
 const SHEET_VIP = '⭐ VIP Contacts';
 const DASHBOARD_SHEET_NAME = '📊 VIP Dashboard';
-const DASHBOARD_HEADER_ROW = 3;
+const DASHBOARD_HEADER_ROW = 4;
 const LABEL_VIP = '⭐ VIP';
 const PROP_SETTINGS = 'vip_settings';
 const PROP_PROCESSED = 'vip_processed_ids';
@@ -37,9 +37,9 @@ const BRAND = {
   gold: '#C9A84C',
   white: '#FFFFFF',
   lightGray: '#F9F9F9',
-  successBg: '#E8F5E9', successText: '#2E7D32',
-  warningBg: '#FFF8E1', warningText: '#F57F17',
-  errorBg: '#FFEBEE', errorText: '#C62828',
+  successBg: '#E6F4EA', successText: '#137333',
+  warningBg: '#FEF7E0', warningText: '#B06000',
+  errorBg: '#FCE8E6', errorText: '#C5221F',
   headerFont: 'Roboto Mono', bodyFont: 'Roboto',
 };
 
@@ -152,7 +152,7 @@ function ensureVIPSheet() {
 
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_VIP, 0);
-    const headers = ['Name', 'Email', 'Priority', 'Alert Method', 'Notes'];
+    const headers = ['Name', 'Email', 'Priority', 'Alert Method', 'Notes', 'Last Alerted'];
     sheet.appendRow(headers);
 
     const headerRange = sheet.getRange(1, 1, 1, headers.length);
@@ -163,30 +163,42 @@ function ensureVIPSheet() {
       .setBackground(BRAND.darkBg)
       .setFontColor(BRAND.gold)
       .setHorizontalAlignment('center');
-    sheet.setRowHeight(1, 32);
+    sheet.setRowHeight(1, 38);
     sheet.setFrozenRows(1);
 
     sheet.setColumnWidth(1, 180);
     sheet.setColumnWidth(2, 260);
-    sheet.setColumnWidth(3, 140);
+    sheet.setColumnWidth(3, 130); // Priority — center-aligned
     sheet.setColumnWidth(4, 180);
     sheet.setColumnWidth(5, 220);
+    sheet.setColumnWidth(6, 160); // Last Alerted
 
+    // Priority — center-align and data validation (rows 2–50 only)
+    sheet.getRange(2, 3, 49, 1).setHorizontalAlignment('center');
     const priorityRule = SpreadsheetApp.newDataValidation()
       .requireValueInList(['🔴 Critical', '🟡 Important', '🟢 Normal'])
       .setAllowInvalid(false)
       .build();
-    sheet.getRange(2, 3, 200, 1).setDataValidation(priorityRule);
+    sheet.getRange(2, 3, 49, 1).setDataValidation(priorityRule);
 
     const methodRule = SpreadsheetApp.newDataValidation()
       .requireValueInList(['📧 Email Alert', '⭐ Star + Label Only'])
       .setAllowInvalid(false)
       .build();
-    sheet.getRange(2, 4, 200, 1).setDataValidation(methodRule);
+    sheet.getRange(2, 4, 49, 1).setDataValidation(methodRule);
 
-    sheet.getRange(2, 1, 200, headers.length)
+    sheet.getRange(2, 1, 49, headers.length)
       .setFontFamily(BRAND.bodyFont)
       .setFontSize(10);
+
+    // Last Alerted column — timestamp format
+    sheet.getRange(2, 6, 49, 1).setNumberFormat('MMM d, yyyy h:mm a');
+
+    // Alternating row tint via banding
+    sheet.getRange(2, 1, 49, headers.length)
+      .applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, false, false)
+      .setFirstBandColor('#FFFFFF')
+      .setSecondBandColor('#F8F8F8');
 
     sheet.appendRow([
       'Jane Doe (example)',
@@ -194,6 +206,7 @@ function ensureVIPSheet() {
       '🔴 Critical',
       '📧 Email Alert',
       'CEO — always alert',
+      '',
     ]);
   }
 
@@ -227,8 +240,21 @@ function getOrCreateDashboard_() {
 
   const numCols = LOG_HEADERS.length;
 
-  // ── Row 1: Stat values ──────────────────────────────────
+  // ── Row 1: Title bar ────────────────────────────────────
   sheet.getRange(1, 1, 1, numCols)
+    .merge()
+    .setValue('📊  VIP DASHBOARD')
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(13)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground('#0D0D0D')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 44);
+
+  // ── Row 2: Stat values ──────────────────────────────────
+  sheet.getRange(2, 1, 1, numCols)
     .setValues([['—', '—', '—', '—', '—', '']])
     .setFontFamily(BRAND.headerFont)
     .setFontSize(20)
@@ -237,10 +263,14 @@ function getOrCreateDashboard_() {
     .setBackground(BRAND.darkBg)
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(1, 52);
+  sheet.setRowHeight(2, 60);
 
-  // ── Row 2: Stat labels ──────────────────────────────────
+  // Gold accent bottom border on stat value row
   sheet.getRange(2, 1, 1, numCols)
+    .setBorder(null, null, true, null, null, null, BRAND.gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+
+  // ── Row 3: Stat labels ──────────────────────────────────
+  sheet.getRange(3, 1, 1, numCols)
     .setValues([['TOTAL ALERTS', 'CRITICAL', 'IMPORTANT', 'TODAY', 'VIPS TRACKED', '']])
     .setFontFamily(BRAND.headerFont)
     .setFontSize(8)
@@ -249,9 +279,9 @@ function getOrCreateDashboard_() {
     .setBackground(BRAND.darkBg)
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(2, 20);
+  sheet.setRowHeight(3, 22);
 
-  // ── Row 3: Column headers ───────────────────────────────
+  // ── Row 4: Column headers ───────────────────────────────
   sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, numCols)
     .setValues([LOG_HEADERS])
     .setFontFamily(BRAND.headerFont)
@@ -263,6 +293,7 @@ function getOrCreateDashboard_() {
     .setVerticalAlignment('middle');
   sheet.setRowHeight(DASHBOARD_HEADER_ROW, 32);
 
+  // Freeze rows 1–4 (title bar + stat bar + col headers)
   sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
 
   // ── Column widths ───────────────────────────────────────
@@ -272,6 +303,33 @@ function getOrCreateDashboard_() {
   sheet.setColumnWidth(4, 140); // Priority
   sheet.setColumnWidth(5, 180); // Action Taken
   sheet.setColumnWidth(6, 160); // Trigger
+
+  // ── Priority-row conditional formatting ─────────────────
+  const firstDataRow = DASHBOARD_HEADER_ROW + 1;
+  const cfRange = sheet.getRange(firstDataRow, 1, 1000, numCols);
+  sheet.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule()
+      .withCriteria(SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA,
+        [`=ISNUMBER(SEARCH("Critical",$D${firstDataRow}))`])
+      .setBackground('#FCE4EC')
+      .setRanges([cfRange])
+      .build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .withCriteria(SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA,
+        [`=ISNUMBER(SEARCH("Important",$D${firstDataRow}))`])
+      .setBackground('#FFF8E1')
+      .setRanges([cfRange])
+      .build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .withCriteria(SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA,
+        [`=ISNUMBER(SEARCH("Normal",$D${firstDataRow}))`])
+      .setBackground('#E8F5E9')
+      .setRanges([cfRange])
+      .build(),
+  ]);
+
+  // ── Hide gridlines (whole spreadsheet) ──────────────────
+  ss.setHiddenGridlines(true);
 
   return sheet;
 }
@@ -314,7 +372,7 @@ function refreshDashboardStats() {
   // Count VIPs from VIP Contacts sheet
   const vips = getVIPList_();
 
-  sheet.getRange(1, 1, 1, 5).setValues([[
+  sheet.getRange(2, 1, 1, 5).setValues([[
     totalAlerts || '—',
     critical || '—',
     important || '—',
@@ -325,8 +383,8 @@ function refreshDashboardStats() {
   var lastRunRaw = PropertiesService.getScriptProperties().getProperty('vip_last_run');
   if (lastRunRaw) {
     var lastRun = Utilities.formatDate(new Date(lastRunRaw), Session.getScriptTimeZone(), 'MMM d, h:mm a');
-    sheet.getRange(1, 6).setValue(lastRun);
-    sheet.getRange(2, 6).setValue('LAST RUN');
+    sheet.getRange(2, 6).setValue(lastRun);
+    sheet.getRange(3, 6).setValue('LAST RUN');
   }
 }
 
@@ -467,13 +525,13 @@ function sendAlertEmail_(settings, senderName, senderEmail, subject, snippet, pr
   const alertTo = settings.alertEmail || Session.getActiveUser().getEmail();
   if (!alertTo) return;
 
-  const priorityColor = priority.includes('Critical') ? '#C62828'
-    : priority.includes('Important') ? '#F57F17'
-    : '#2E7D32';
+  const priorityColor = priority.includes('Critical') ? BRAND.errorText
+    : priority.includes('Important') ? BRAND.warningText
+    : BRAND.successText;
 
-  const priorityBg = priority.includes('Critical') ? '#FFEBEE'
-    : priority.includes('Important') ? '#FFF8E1'
-    : '#E8F5E9';
+  const priorityBg = priority.includes('Critical') ? BRAND.errorBg
+    : priority.includes('Important') ? BRAND.warningBg
+    : BRAND.successBg;
 
   const htmlBody = `
     <div style="font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; max-width: 560px; margin: 0 auto;">
@@ -531,35 +589,50 @@ function logAlert_(sender, subject, priority, action, trigger) {
   const dataStartRow = DASHBOARD_HEADER_ROW + 1;
   const newRow = Math.max(sheet.getLastRow() + 1, dataStartRow);
 
+  const now = new Date();
   sheet.getRange(newRow, 1, 1, LOG_HEADERS.length).setValues([
-    [new Date(), sender, subject, priority, action, trigger],
+    [now, sender, subject, priority, action, trigger],
   ]);
 
-  // Base row styling
-  const isEven = (newRow - DASHBOARD_HEADER_ROW) % 2 === 0;
+  // Row styling
   sheet.getRange(newRow, 1, 1, LOG_HEADERS.length)
     .setFontFamily(BRAND.bodyFont)
-    .setFontSize(10)
-    .setBackground(isEven ? BRAND.lightGray : BRAND.white);
+    .setFontSize(10);
   sheet.setRowHeight(newRow, 30);
 
   // Timestamp format
   sheet.getRange(newRow, 1).setNumberFormat('MMM d, yyyy h:mm a');
 
-  // Priority cell color
+  // Priority cell — bold + text color (background handled by conditional formatting)
   const priorityCell = sheet.getRange(newRow, 4);
   if (priority.includes('Critical')) {
-    priorityCell.setBackground(BRAND.errorBg).setFontColor(BRAND.errorText).setFontWeight('bold');
+    priorityCell.setFontColor(BRAND.errorText).setFontWeight('bold');
   } else if (priority.includes('Important')) {
-    priorityCell.setBackground(BRAND.warningBg).setFontColor(BRAND.warningText).setFontWeight('bold');
+    priorityCell.setFontColor(BRAND.warningText).setFontWeight('bold');
   } else {
-    priorityCell.setBackground(BRAND.successBg).setFontColor(BRAND.successText).setFontWeight('bold');
+    priorityCell.setFontColor(BRAND.successText).setFontWeight('bold');
   }
 
-  // Action cell color
+  // Action cell — success tint
   sheet.getRange(newRow, 5)
     .setBackground(BRAND.successBg)
     .setFontColor(BRAND.successText);
+
+  // Update Last Alerted in VIP Contacts sheet
+  try {
+    const vipSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_VIP);
+    if (vipSheet && vipSheet.getLastRow() > 1) {
+      const emailData = vipSheet.getRange(2, 2, vipSheet.getLastRow() - 1, 1).getValues();
+      for (let i = 0; i < emailData.length; i++) {
+        if ((emailData[i][0] || '').toString().trim().toLowerCase() === sender.toLowerCase()) {
+          vipSheet.getRange(i + 2, 6).setValue(now).setNumberFormat('MMM d, yyyy h:mm a');
+          break;
+        }
+      }
+    }
+  } catch(e) {
+    Logger.log('Could not update Last Alerted: ' + e.message);
+  }
 
   refreshDashboardStats();
 }
@@ -792,45 +865,59 @@ function getSettingsHtml() {
 <html>
 <head>
   <style>
+    :root {
+      --gold: #C9A84C;
+      --gold-hover: #b8943c;
+      --gold-glow: rgba(201,168,76,0.15);
+      --bg-dark: #1A1A1A;
+      --surface: #FAFAFA;
+      --border: #E0E0E0;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #FAFAFA; color: #1a1a1a; font-size: 13px; }
-    .header { background: #1A1A1A; color: white; padding: 20px 16px; text-align: center; }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--surface); color: #1a1a1a; font-size: 13px; }
+    .header { background: var(--bg-dark); color: white; padding: 20px 16px; text-align: center; }
     .header .logo { font-size: 24px; margin-bottom: 4px; }
     .header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; }
-    .header .brand { color: #C9A84C; }
+    .header .brand { color: var(--gold); }
     .header .sub { font-size: 11px; color: #888; margin-top: 4px; }
     .form { padding: 16px; }
     .section-title {
       font-size: 11px; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 1.2px; color: #C9A84C; margin: 20px 0 12px;
-      padding-bottom: 6px; border-bottom: 1px solid #eee;
+      letter-spacing: 1.2px; color: var(--gold); margin: 20px 0 12px;
+      padding-bottom: 6px; border-bottom: 2px solid var(--gold);
     }
     .section-title:first-child { margin-top: 0; }
     .field { margin-bottom: 16px; }
     .field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-bottom: 6px; }
     .field input, .field textarea, .field select {
-      width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px;
-      font-size: 13px; font-family: inherit; background: white; transition: border-color 0.2s;
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 13px; font-family: inherit; background: white; transition: border-color 0.2s, box-shadow 0.2s;
     }
     .field input:focus, .field textarea:focus, .field select:focus {
-      outline: none; border-color: #C9A84C; box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
+      outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-glow);
     }
     .field textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
     .field .help { font-size: 11px; color: #999; margin-top: 4px; line-height: 1.4; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-    .toggle-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #C9A84C; cursor: pointer; }
+    .toggle-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--gold); cursor: pointer; }
     .toggle-row label { font-size: 13px; font-weight: 500; color: #333; cursor: pointer; text-transform: none; letter-spacing: 0; }
     .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px; }
-    .btn-primary { background: #1A1A1A; color: #C9A84C; border: 1px solid #C9A84C; }
-    .btn-primary:hover { background: #C9A84C; color: #1A1A1A; }
-    .btn-secondary { background: white; color: #666; border: 1px solid #ddd; margin-top: 8px; }
+    .btn-primary { background: var(--gold); color: var(--bg-dark); border: 1px solid var(--gold); }
+    .btn-primary:hover { background: var(--gold-hover); border-color: var(--gold-hover); }
+    .btn-primary:disabled { opacity: 0.65; cursor: not-allowed; }
+    .btn-secondary { background: white; color: #666; border: 1px solid var(--border); margin-top: 8px; }
     .btn-secondary:hover { border-color: #999; color: #333; }
-    .status { text-align: center; padding: 8px; font-size: 12px; margin-top: 8px; border-radius: 6px; display: none; }
-    .status.success { display: block; background: #E8F5E9; color: #2E7D32; }
-    .status.error { display: block; background: #FFEBEE; color: #C62828; }
-    .divider { border-top: 1px solid #eee; margin: 20px 0; }
-    .info-box { background: #FFF8E1; border-radius: 6px; padding: 10px 12px; font-size: 12px; color: #F57F17; line-height: 1.5; margin-top: 8px; }
+    .status {
+      text-align: center; padding: 10px 12px; font-size: 12px; font-weight: 500;
+      margin-top: 10px; border-radius: 6px; display: none;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .status.success { display: block; background: #E6F4EA; color: #137333; border: 1px solid #ceead6; }
+    .status.error { display: block; background: #FCE8E6; color: #C5221F; border: 1px solid #f5c6c2; }
+    .divider { border: none; border-top: 1px solid var(--gold-glow); margin: 20px 0; }
+    .info-box { background: #FEF7E0; border-left: 3px solid var(--gold); border-radius: 0 6px 6px 0; padding: 10px 12px; font-size: 12px; color: #B06000; line-height: 1.5; margin-top: 8px; }
   </style>
 </head>
 <body>

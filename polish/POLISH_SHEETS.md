@@ -18,6 +18,7 @@ A practical design reference for polishing Google Apps Scripts that create or mo
 10. [Charts](#10-charts)
 11. [What to Avoid](#11-what-to-avoid)
 12. [Apps Script Implementation Notes](#12-apps-script-implementation-notes)
+13. [Data Validation Scope](#13-data-validation-scope)
 
 ---
 
@@ -182,6 +183,10 @@ Rows 5+:  [Data Row]
 Last Row: [Totals / Summary Row]
 ```
 
+### Title Bar Row
+
+Add a merged title bar in Row 1 spanning all columns. Background `#0D0D0D` or the brand dark bg, text: script name in white + brand font, size 16–18pt. This anchors the sheet visually above the stat cards.
+
 ### Stat Card Design (Rows 1–2)
 
 Each stat card occupies multiple merged columns. Typical layout for a 12-column sheet:
@@ -195,6 +200,10 @@ Row 1 contains the large numeric/metric value (20pt bold).
 Row 2 contains the descriptive label (9pt regular, gray `#757575`).
 
 **Never put both the value and label in the same merged cell.** Keeping them in separate rows lets you format them independently and makes future edits clean.
+
+### Stat Card Design Detail
+
+Each stat card block should stack the value (large, bold, brand accent color) above the label (small, uppercase, muted). Use merged cells (2–3 cols per stat), add `border-left: thick solid brand accent` or a thick accent bottom border to create card depth. Avoid raw unbordered cells.
 
 ### Section Headers
 
@@ -258,6 +267,7 @@ Less is more. Borders exist to guide the eye, not to cage every cell.
 - **No borders on blank/spacer rows.** Leave them clean.
 - **No borders on the sheet canvas** outside your data range.
 - **No borders around individual stat card metric cells** — use the card outline border only.
+- **Dashboard zone gridlines**: Hide gridlines in the dashboard header area (rows 1–N of the stat/header section). Set all cell borders to none and rely on background fills for visual separation. White grid lines breaking a dark dashboard header destroys the look.
 
 ### Apps Script Border Constants
 
@@ -317,6 +327,10 @@ Date > TODAY():  No formatting              (upcoming — keep clean)
 - Keep the rule count under 10 per sheet. More than that degrades performance and becomes unmaintainable.
 - Use **Custom formula** rules (`=` prefix) when you need cross-column logic. Example: highlight a row if column C equals "Error": `=$C2="Error"`.
 - Always test conditional formatting rules after applying banding (alternating colors) — they stack in unexpected ways.
+
+### Priority-Level Row Banding
+
+**Priority-level row banding (for scripts with a priority/status column)**: Apply row-level conditional formatting based on the priority/status cell value — Critical → `#FCE4EC` (light red), Important/High → `#FFF8E1` (amber), Normal/Low → `#E8F5E9` (light green). This makes log tables scannable at a glance without reading each cell.
 
 ### Apps Script Conditional Formatting
 
@@ -379,6 +393,10 @@ These are battle-tested widths. Use them as your starting point.
 | Long text / notes         | 300        | Multi-word descriptions (wrap enabled)     |
 | URL                       | 200        | Display with hyperlink, truncate           |
 | Icon / emoji column       | 40         | Just the symbol                            |
+
+### Last Alerted / Last Run Columns
+
+**Last Alerted / Last Run columns**: Any script that sends alerts on a per-row basis (VIPs, contacts, inventory items) should have a "Last Alerted" or "Last Run" column that the script populates automatically. Set this column as read-only via protection and format it as `MMM d, yyyy h:mm a`. Width: 150–170px.
 
 ### Width Setting in Apps Script
 
@@ -826,6 +844,12 @@ linkRange.setFormula(`=HYPERLINK("${url}", "${displayText}")`);
 linkRange.setFontColor('#1565C0');
 linkRange.setFontLine('underline');
 ```
+
+---
+
+## 13. Data Validation Scope
+
+Apply data validation (dropdowns) only to the rows that will realistically be used (e.g., rows 2–50 or 2–100), not the entire column. Dropdown arrows in hundreds of empty rows look cluttered and signal an unfinished product.
 
 ---
 
