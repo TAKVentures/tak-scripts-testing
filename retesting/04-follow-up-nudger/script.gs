@@ -28,16 +28,16 @@
 
 var DASHBOARD_SHEET_NAME = '\uD83D\uDCCA Follow-Up Dashboard';
 var LOG_SHEET_NAME = '\uD83D\uDCDD Follow-Up Log';
-var DASHBOARD_HEADER_ROW = 3;
+var DASHBOARD_HEADER_ROW = 4;
 
 var BRAND = {
   darkBg: '#1A1A1A',
   gold: '#C9A84C',
   white: '#FFFFFF',
   lightGray: '#F9F9F9',
-  successBg: '#E8F5E9', successText: '#2E7D32',
-  warningBg: '#FFF8E1', warningText: '#F57F17',
-  errorBg: '#FFEBEE', errorText: '#C62828',
+  successBg: '#E6F4EA', successText: '#137333',
+  warningBg: '#FEF7E0', warningText: '#B06000',
+  errorBg: '#FCE8E6', errorText: '#C5221F',
   infoBg: '#E3F2FD', infoText: '#1565C0',
   headerFont: 'Roboto Mono', bodyFont: 'Roboto',
 };
@@ -50,11 +50,15 @@ var COL = {
   status: 5,
   followUpSent: 6,
   threadId: 7,
+  notes: 8,
+  snoozeUntil: 9,
+  gmailLink: 10,
 };
 
 var HEADERS = [
   'Date Sent', 'To', 'Subject', 'Days Waiting',
   'Status', 'Follow-Up Sent', 'Thread ID',
+  'Notes', 'Snooze Until', 'Gmail Link',
 ];
 
 var TRIGGER_FUNCTION = 'runFollowUpCheck';
@@ -78,10 +82,11 @@ function onOpen() {
     .addSeparator()
     .addItem('\uD83E\uDDEA Test Run (no emails sent)', 'testRun')
     .addItem('\uD83D\uDCCA View Dashboard', 'viewDashboard')
-    .addItem('✓ Mark as Resolved', 'markResolved')
+    .addItem('\u2713 Mark as Resolved', 'markResolved')
+    .addItem('\uD83D\uDCA4 Snooze Selected (7 days)', 'snoozeRow')
     .addItem('\uD83D\uDD04 Refresh Stats', 'refreshDashboardStats')
     .addSeparator()
-    .addItem('❓ How to Use', 'showHelp')
+    .addItem('\u2753 How to Use', 'showHelp')
     .addItem('\u2139\uFE0F About TAKScripts', 'showAbout')
     .addToUi();
 }
@@ -153,6 +158,7 @@ function getDefaultSettings_() {
     urgentAfterDays: 7,
     autoSend: false,
     sendDigest: true,
+    autoSchedule: false,
     triggerIntervalHours: 1,
     excludeDomains: 'noreply, no-reply, notifications, mailer-daemon, newsletter, calendar-notification',
     followUpSubject: 'Re: {{subject}}',
@@ -212,7 +218,6 @@ function getOrCreateDashboard_() {
   var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
 
   if (!sheet) {
-    // Migration: rename old tracker sheet if it exists
     var oldSheet = ss.getSheetByName('\uD83D\uDCEC Follow-Up Tracker');
     if (oldSheet) {
       oldSheet.setName(DASHBOARD_SHEET_NAME);
@@ -222,21 +227,30 @@ function getOrCreateDashboard_() {
       sheet = ss.insertSheet(DASHBOARD_SHEET_NAME);
     }
   } else {
-    // Check if stats bar already exists (row 1 col 1 = a number or empty)
-    // If row 1 has content and row 3 has headers, it's already set up
     var headerCheck = sheet.getRange(DASHBOARD_HEADER_ROW, 1).getValue();
     if (headerCheck === HEADERS[0]) {
       return sheet; // Already set up
     }
   }
 
-  // ── Stats Bar (Rows 1 & 2) ──────────────────────────────
-  var numCols = HEADERS.length;
+  var numCols = HEADERS.length; // 10
 
-  // Row 1: stat values — large gold numbers on dark background
-  var statsValueRange = sheet.getRange(1, 1, 1, numCols);
-  statsValueRange
-    .setValues([['—', '—', '—', '—', '—', '', '']])
+  // ── Row 1: Title bar ────────────────────────────────────
+  sheet.getRange(1, 1, 1, numCols)
+    .merge()
+    .setValue('\uD83D\uDCCA  FOLLOW-UP DASHBOARD')
+    .setFontFamily(BRAND.headerFont)
+    .setFontSize(13)
+    .setFontWeight('bold')
+    .setFontColor(BRAND.gold)
+    .setBackground('#0D0D0D')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setRowHeight(1, 44);
+
+  // ── Row 2: Stat values ──────────────────────────────────
+  sheet.getRange(2, 1, 1, numCols)
+    .setValues([['—', '—', '—', '—', '—', '', '', '', '', '']])
     .setFontFamily(BRAND.headerFont)
     .setFontSize(20)
     .setFontWeight('bold')
@@ -244,12 +258,15 @@ function getOrCreateDashboard_() {
     .setBackground(BRAND.darkBg)
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(1, 52);
+  sheet.setRowHeight(2, 60);
 
-  // Row 2: stat labels — uppercase white text on dark background
-  var statsLabelRange = sheet.getRange(2, 1, 1, numCols);
-  statsLabelRange
-    .setValues([['PENDING', 'OVERDUE', 'AVG WAIT', 'AUTO-SENT', 'LONGEST', '', '']])
+  // Gold accent bottom border on stat value row
+  sheet.getRange(2, 1, 1, numCols)
+    .setBorder(null, null, true, null, null, null, BRAND.gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+
+  // ── Row 3: Stat labels ──────────────────────────────────
+  sheet.getRange(3, 1, 1, numCols)
+    .setValues([['PENDING', 'OVERDUE', 'AVG WAIT', 'AUTO-SENT', 'LONGEST', 'LAST RUN', '', '', '', '']])
     .setFontFamily(BRAND.headerFont)
     .setFontSize(8)
     .setFontWeight('normal')
@@ -257,11 +274,10 @@ function getOrCreateDashboard_() {
     .setBackground(BRAND.darkBg)
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  sheet.setRowHeight(2, 20);
+  sheet.setRowHeight(3, 22);
 
-  // ── Column Headers (Row 3) ──────────────────────────────
-  var headerRange = sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, numCols);
-  headerRange
+  // ── Row 4: Column headers ───────────────────────────────
+  sheet.getRange(DASHBOARD_HEADER_ROW, 1, 1, numCols)
     .setValues([HEADERS])
     .setFontFamily(BRAND.headerFont)
     .setFontSize(9)
@@ -272,10 +288,10 @@ function getOrCreateDashboard_() {
     .setVerticalAlignment('middle');
   sheet.setRowHeight(DASHBOARD_HEADER_ROW, 32);
 
-  // Freeze stats + headers
+  // Freeze rows 1–4 (title bar + stat bar + col headers)
   sheet.setFrozenRows(DASHBOARD_HEADER_ROW);
 
-  // ── Column Widths ───────────────────────────────────────
+  // ── Column widths ───────────────────────────────────────
   sheet.setColumnWidth(COL.dateSent, 170);
   sheet.setColumnWidth(COL.to, 220);
   sheet.setColumnWidth(COL.subject, 280);
@@ -283,7 +299,13 @@ function getOrCreateDashboard_() {
   sheet.setColumnWidth(COL.status, 100);
   sheet.setColumnWidth(COL.followUpSent, 130);
   sheet.setColumnWidth(COL.threadId, 160);
+  sheet.setColumnWidth(COL.notes, 200);
+  sheet.setColumnWidth(COL.snoozeUntil, 130);
+  sheet.setColumnWidth(COL.gmailLink, 100);
   sheet.hideColumns(COL.threadId); // Internal dedup field
+
+  // Hide gridlines
+  ss.setHiddenGridlines(true);
 
   return sheet;
 }
@@ -294,8 +316,8 @@ function getOrCreateDashboard_() {
  */
 function refreshDashboardStats() {
   var sheet = getOrCreateDashboard_();
-  var lastRow = sheet.getLastRow();
   var dataStartRow = DASHBOARD_HEADER_ROW + 1;
+  var lastRow = sheet.getLastRow();
 
   var pending = 0;
   var overdue = 0;
@@ -309,15 +331,28 @@ function refreshDashboardStats() {
 
     for (var i = 0; i < data.length; i++) {
       var row = data[i];
+      if (!row[COL.dateSent - 1]) continue; // Skip empty rows
+
       var daysWaiting = parseInt(row[COL.daysWaiting - 1], 10) || 0;
       var status = row[COL.status - 1];
       var followUpSent = row[COL.followUpSent - 1];
 
-      if (!row[COL.dateSent - 1]) continue; // Skip empty rows
+      // Handle snooze
+      var snoozeVal = row[COL.snoozeUntil - 1];
+      var actualRow = dataStartRow + i;
+      if (snoozeVal) {
+        var snoozeDate = new Date(snoozeVal);
+        if (snoozeDate > new Date()) {
+          continue; // Still snoozed — skip from stats
+        } else {
+          // Snooze expired — clear it and un-hide
+          sheet.getRange(actualRow, COL.snoozeUntil).clearContent();
+          sheet.showRows(actualRow);
+        }
+      }
 
       pending++;
       totalWait += daysWaiting;
-
       if (status === 'Overdue' || status === 'Urgent') overdue++;
       if (followUpSent && followUpSent.toString().indexOf('Yes') === 0) autoSentCount++;
       if (daysWaiting > longest) longest = daysWaiting;
@@ -325,10 +360,10 @@ function refreshDashboardStats() {
   }
 
   var avgWait = pending > 0 ? Math.round(totalWait / pending) : 0;
-
   var lastRunStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'MMM d, h:mm a');
 
-  sheet.getRange(1, 1, 1, 6).setValues([[
+  // Write stat values to row 2
+  sheet.getRange(2, 1, 1, 6).setValues([[
     pending || '—',
     overdue || '—',
     pending > 0 ? avgWait + 'd' : '—',
@@ -337,15 +372,13 @@ function refreshDashboardStats() {
     lastRunStr,
   ]]);
 
-  // Ensure the LAST RUN label is set in row 2
-  sheet.getRange(2, 6).setValue('LAST RUN');
+  // Ensure LAST RUN label stays in row 3
+  sheet.getRange(3, 6).setValue('LAST RUN');
 
   // Hide resolved rows
-  var dataStartRow = DASHBOARD_HEADER_ROW + 1;
-  var lastRow = sheet.getLastRow();
-  for (var r = dataStartRow; r <= lastRow; r++) {
+  for (var r = dataStartRow; r <= sheet.getLastRow(); r++) {
     var statusVal = sheet.getRange(r, COL.status).getValue().toString();
-    if (statusVal.indexOf('Done') !== -1 || statusVal === '✓') {
+    if (statusVal.indexOf('Done') !== -1 || statusVal === '\u2713') {
       sheet.hideRows(r);
     }
   }
@@ -364,9 +397,39 @@ function markResolved() {
     try { SpreadsheetApp.getUi().alert('Select a data row in the dashboard first.'); } catch(e) { Logger.log('Select a data row in the dashboard first.'); }
     return;
   }
-  sheet.getRange(row, COL.status).setValue('Done ✓');
+  sheet.getRange(row, COL.status).setValue('Done \u2713');
   sheet.getRange(row, COL.status).setFontColor('#888888');
   refreshDashboardStats();
+}
+
+
+/**
+ * Snoozes the selected dashboard row for 7 days.
+ * Sets the Snooze Until date so the row is hidden during that period.
+ */
+function snoozeRow() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(DASHBOARD_SHEET_NAME);
+  if (!sheet) return;
+  var row = ss.getActiveRange().getRow();
+  if (row <= DASHBOARD_HEADER_ROW) {
+    try { SpreadsheetApp.getUi().alert('Select a data row in the dashboard first.'); }
+    catch(e) { Logger.log('Select a data row in the dashboard first.'); }
+    return;
+  }
+  var snoozeDate = new Date();
+  snoozeDate.setDate(snoozeDate.getDate() + 7);
+  sheet.getRange(row, COL.snoozeUntil).setValue(snoozeDate);
+  sheet.getRange(row, COL.snoozeUntil).setNumberFormat('yyyy-mm-dd');
+  sheet.hideRows(row);
+  refreshDashboardStats();
+  try {
+    SpreadsheetApp.getUi().alert('\uD83D\uDCA4 Snoozed until ' +
+      Utilities.formatDate(snoozeDate, Session.getScriptTimeZone(), 'MMM d') +
+      '. Row hidden. It will reappear on next refresh after the snooze expires.');
+  } catch(e) {
+    Logger.log('Snoozed row ' + row);
+  }
 }
 
 
@@ -423,7 +486,6 @@ function runFollowUpCheck() {
         var messages = allMessages.filter(function(m) {
           return m.getDate() >= lastSentDate;
         });
-        // Fall back to full list if filter produces nothing
         if (messages.length === 0) messages = allMessages;
 
         var gotReply = false;
@@ -516,14 +578,11 @@ function sendFollowUp_(item, settings) {
     .replace(/\{\{subject\}\}/g, item.subject)
     .replace(/\{\{name\}\}/g, name)
     .replace(/\{\{days\}\}/g, String(item.daysWaiting));
-
   var bodyText = settings.followUpMessage
     .replace(/\{\{name\}\}/g, name)
     .replace(/\{\{subject\}\}/g, item.subject)
     .replace(/\{\{days\}\}/g, String(item.daysWaiting));
-
   var htmlBody = buildBrandedEmail_(bodyText, 'Follow-Up');
-
   item.lastMessage.reply('', {
     htmlBody: htmlBody,
     subject: subject,
@@ -536,59 +595,53 @@ function sendFollowUp_(item, settings) {
 function sendDigestEmail_(pending, sent, settings) {
   var myEmail = Session.getActiveUser().getEmail();
   var rows = '';
-
   for (var i = 0; i < pending.length; i++) {
     var item = pending[i];
     var wasSent = false;
     for (var s = 0; s < sent.length; s++) {
       if (sent[s].threadId === item.threadId) { wasSent = true; break; }
     }
-
-    var statusColor = item.daysWaiting >= settings.urgentAfterDays ? '#C62828' :
-                      item.daysWaiting >= settings.overdueAfterDays ? '#E65100' : '#1565C0';
+    var statusColor = item.daysWaiting >= settings.urgentAfterDays ? BRAND.errorText :
+      item.daysWaiting >= settings.overdueAfterDays ? BRAND.warningText : BRAND.infoText;
     var statusLabel = item.daysWaiting >= settings.urgentAfterDays ? 'Urgent' :
-                      item.daysWaiting >= settings.overdueAfterDays ? 'Overdue' : 'Pending';
+      item.daysWaiting >= settings.overdueAfterDays ? 'Overdue' : 'Pending';
     var statusBadge = '<span style="background:' + statusColor + ';color:white;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">' + statusLabel + '</span>';
-
     rows +=
       '<tr style="border-bottom: 1px solid #eee;">' +
-        '<td style="padding: 10px 12px; font-size: 13px;">' + escapeHtml_(item.to) + '</td>' +
-        '<td style="padding: 10px 12px; font-size: 13px;">' + escapeHtml_(item.subject) + '</td>' +
-        '<td style="padding: 10px 12px; text-align: center; font-weight: 600; color: ' + statusColor + ';">' +
-          item.daysWaiting + ' days</td>' +
-        '<td style="padding: 10px 12px; text-align: center;">' + statusBadge + '</td>' +
-        '<td style="padding: 10px 12px; text-align: center; font-size: 13px;">' +
-          (wasSent ? '\u2705 Sent' : '\u23F3 Pending') + '</td>' +
+      '<td style="padding: 10px 12px; font-size: 13px;">' + escapeHtml_(item.to) + '</td>' +
+      '<td style="padding: 10px 12px; font-size: 13px;">' + escapeHtml_(item.subject) + '</td>' +
+      '<td style="padding: 10px 12px; text-align: center; font-weight: 600; color: ' + statusColor + ';">' +
+        item.daysWaiting + ' days</td>' +
+      '<td style="padding: 10px 12px; text-align: center;">' + statusBadge + '</td>' +
+      '<td style="padding: 10px 12px; text-align: center; font-size: 13px;">' +
+        (wasSent ? '\u2705 Sent' : '\u23F3 Pending') + '</td>' +
       '</tr>';
   }
-
   var digestHtml =
     buildEmailHeader_('Follow-Up Digest') +
     '<div style="padding: 24px;">' +
-      '<p style="font-size: 14px; color: #333; margin: 0 0 16px;">You have <strong>' +
-        pending.length + '</strong> email' + (pending.length === 1 ? '' : 's') +
-        ' awaiting a reply.</p>' +
-      '<table style="width: 100%; border-collapse: collapse; font-family: \'Segoe UI\', sans-serif;">' +
-        '<thead>' +
-          '<tr style="background: #f5f5f5;">' +
-            '<th style="padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #666;">To</th>' +
-            '<th style="padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #666;">Subject</th>' +
-            '<th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase; color: #666;">Waiting</th>' +
-            '<th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase; color: #666;">Status</th>' +
-            '<th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase; color: #666;">Follow-Up</th>' +
-          '</tr>' +
-        '</thead>' +
-        '<tbody>' + rows + '</tbody>' +
-      '</table>' +
+    '<p style="font-size: 14px; color: #333; margin: 0 0 16px;">You have <strong>' +
+      pending.length + '</strong> email' + (pending.length === 1 ? '' : 's') +
+      ' awaiting a reply.</p>' +
+    '<table style="width: 100%; border-collapse: collapse; font-family: \'Segoe UI\', sans-serif;">' +
+    '<thead>' +
+    '<tr style="background: #f5f5f5;">' +
+    '<th style="padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #666;">To</th>' +
+    '<th style="padding: 10px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #666;">Subject</th>' +
+    '<th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase; color: #666;">Waiting</th>' +
+    '<th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase; color: #666;">Status</th>' +
+    '<th style="padding: 10px 12px; text-align: center; font-size: 11px; text-transform: uppercase; color: #666;">Follow-Up</th>' +
+    '</tr>' +
+    '</thead>' +
+    '<tbody>' + rows + '</tbody>' +
+    '</table>' +
     '</div>' +
     buildEmailFooter_();
-
   GmailApp.sendEmail(myEmail, '\uD83D\uDD14 Follow-Up Digest: ' + pending.length + ' pending repl' +
     (pending.length === 1 ? 'y' : 'ies'), '', {
     htmlBody: digestHtml,
     name: 'Follow-Up Nudger by TAKScripts',
   });
-
   writeLog_('Digest Sent', myEmail, '', pending.length + ' pending follow-ups reported');
 }
 
@@ -600,18 +653,18 @@ function sendDigestEmail_(pending, sent, settings) {
 function buildEmailHeader_(subtitle) {
   return '<!DOCTYPE html><html><body style="margin:0; padding:0; font-family: \'Segoe UI\', system-ui, sans-serif;">' +
     '<div style="max-width: 600px; margin: 0 auto; background: #fff;">' +
-      '<div style="background: #1A1A1A; padding: 24px; text-align: center;">' +
-        '<span style="font-size: 24px;">\uD83D\uDD77</span>' +
-        '<h1 style="margin: 4px 0 0; font-size: 16px; color: #C9A84C; font-weight: 600; letter-spacing: 0.5px;">' +
-          'TAKScripts</h1>' +
-        '<p style="margin: 4px 0 0; font-size: 11px; color: #888;">' + escapeHtml_(subtitle) + '</p>' +
-      '</div>';
+    '<div style="background: #1A1A1A; padding: 24px; text-align: center;">' +
+    '<span style="font-size: 24px;">\uD83D\uDD77</span>' +
+    '<h1 style="margin: 4px 0 0; font-size: 16px; color: #C9A84C; font-weight: 600; letter-spacing: 0.5px;">' +
+      'TAKScripts</h1>' +
+    '<p style="margin: 4px 0 0; font-size: 11px; color: #888;">' + escapeHtml_(subtitle) + '</p>' +
+    '</div>';
 }
 
 function buildEmailFooter_() {
   return '<div style="background: #f5f5f5; padding: 16px; text-align: center; font-size: 11px; color: #999;">' +
-      'Powered by <a href="https://takscripts.store" style="color: #C9A84C; text-decoration: none; font-weight: 600;">' +
-      'TAKScripts</a> \u00B7 takscripts.store' +
+    'Powered by <a href="https://takscripts.store" style="color: #C9A84C; text-decoration: none; font-weight: 600;">' +
+    'TAKScripts</a> \u00B7 takscripts.store' +
     '</div></div></body></html>';
 }
 
@@ -619,7 +672,7 @@ function buildBrandedEmail_(bodyText, subtitle) {
   var htmlBody = escapeHtml_(bodyText).replace(/\n/g, '<br>');
   return buildEmailHeader_(subtitle) +
     '<div style="padding: 24px; font-size: 14px; color: #333; line-height: 1.7;">' +
-      htmlBody +
+    htmlBody +
     '</div>' +
     buildEmailFooter_();
 }
@@ -638,7 +691,7 @@ function updateTrackerSheet_(items) {
   var sheet = getOrCreateDashboard_();
   var dataStartRow = DASHBOARD_HEADER_ROW + 1;
 
-  // Clear existing data rows (preserve stats bar + headers)
+  // Clear existing data rows (preserve title bar + stats + headers)
   var lastRow = sheet.getLastRow();
   if (lastRow >= dataStartRow) {
     sheet.getRange(dataStartRow, 1, lastRow - dataStartRow + 1, HEADERS.length)
@@ -653,16 +706,17 @@ function updateTrackerSheet_(items) {
     return;
   }
 
-  // Write data rows
+  // Load settings once — passed to styleDataRow_ to avoid per-row PropertiesService reads
   var settings = loadSettings();
+
+  // Write data rows
   var data = [];
   for (var i = 0; i < items.length; i++) {
     var item = items[i];
     var status = item.daysWaiting >= settings.urgentAfterDays ? 'Urgent' :
-                 item.daysWaiting >= settings.overdueAfterDays ? 'Overdue' : 'Pending';
+      item.daysWaiting >= settings.overdueAfterDays ? 'Overdue' : 'Pending';
     var followUpText = item.followUpsSent > 0 ?
       'Yes (' + item.followUpsSent + ')' : 'No';
-
     data.push([
       item.dateSent,
       item.to,
@@ -671,6 +725,9 @@ function updateTrackerSheet_(items) {
       status,
       followUpText,
       item.threadId,
+      '',
+      '',
+      'https://mail.google.com/mail/u/0/#all/' + item.threadId,
     ]);
   }
 
@@ -684,19 +741,17 @@ function updateTrackerSheet_(items) {
     .setVerticalAlignment('middle')
     .setFontWeight('normal')
     .setFontColor('#333333');
-
   sheet.getRange(dataStartRow, COL.dateSent, data.length, 1)
     .setNumberFormat('MMM d, yyyy');
 
-  // Style each row
+  // Style each row (settings passed in — no per-row PropertiesService reads)
   for (var row = 0; row < data.length; row++) {
-    styleDataRow_(sheet, dataStartRow + row, data[row]);
+    styleDataRow_(sheet, dataStartRow + row, data[row], settings);
   }
 
-  // Auto-resize key columns
+  // Auto-resize key columns with minimum widths enforced
   sheet.autoResizeColumn(COL.to);
   sheet.autoResizeColumn(COL.subject);
-  // Enforce minimum widths
   if (sheet.getColumnWidth(COL.to) < 220) sheet.setColumnWidth(COL.to, 220);
   if (sheet.getColumnWidth(COL.subject) < 280) sheet.setColumnWidth(COL.subject, 280);
 
@@ -708,11 +763,11 @@ function updateTrackerSheet_(items) {
  * @param {Sheet} sheet - The dashboard sheet.
  * @param {number} rowNum - 1-based row number.
  * @param {Array} rowData - Row data array.
+ * @param {Object} settings - Pre-loaded settings object (avoids per-row PropertiesService reads).
  */
-function styleDataRow_(sheet, rowNum, rowData) {
+function styleDataRow_(sheet, rowNum, rowData, settings) {
   var isEven = (rowNum - DASHBOARD_HEADER_ROW) % 2 === 0;
   var baseBg = isEven ? BRAND.lightGray : BRAND.white;
-
   sheet.getRange(rowNum, 1, 1, HEADERS.length).setBackground(baseBg);
   sheet.setRowHeight(rowNum, 30);
 
@@ -729,12 +784,11 @@ function styleDataRow_(sheet, rowNum, rowData) {
   statusCell.setFontWeight('bold').setHorizontalAlignment('center');
 
   // Days Waiting cell (col 4) — color-coded by urgency
-  var rowSettings = loadSettings();
   var daysWaiting = parseInt(rowData[COL.daysWaiting - 1], 10) || 0;
   var daysCell = sheet.getRange(rowNum, COL.daysWaiting);
-  if (daysWaiting >= rowSettings.urgentAfterDays) {
+  if (daysWaiting >= settings.urgentAfterDays) {
     daysCell.setBackground(BRAND.errorBg).setFontColor(BRAND.errorText).setFontWeight('bold');
-  } else if (daysWaiting >= rowSettings.overdueAfterDays) {
+  } else if (daysWaiting >= settings.overdueAfterDays) {
     daysCell.setBackground(BRAND.warningBg).setFontColor(BRAND.warningText).setFontWeight('bold');
   }
   daysCell.setHorizontalAlignment('center');
@@ -745,7 +799,7 @@ function styleDataRow_(sheet, rowNum, rowData) {
 // ACTIVITY LOG
 // ═══════════════════════════════════════════
 
-var LOG_HEADERS = ['Timestamp', 'Action', 'To', 'Subject', 'Details'];
+var LOG_HEADERS_LIST = ['Timestamp', 'Action', 'To', 'Subject', 'Details'];
 
 /**
  * Writes an entry to the activity log sheet.
@@ -754,11 +808,10 @@ function writeLog_(action, to, subject, details) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(LOG_SHEET_NAME);
-
     if (!sheet) {
       sheet = ss.insertSheet(LOG_SHEET_NAME);
-      sheet.appendRow(LOG_HEADERS);
-      var headerRange = sheet.getRange(1, 1, 1, LOG_HEADERS.length);
+      sheet.appendRow(LOG_HEADERS_LIST);
+      var headerRange = sheet.getRange(1, 1, 1, LOG_HEADERS_LIST.length);
       headerRange
         .setFontWeight('bold')
         .setBackground(BRAND.darkBg)
@@ -772,7 +825,6 @@ function writeLog_(action, to, subject, details) {
       sheet.setColumnWidth(4, 280);
       sheet.setColumnWidth(5, 300);
     }
-
     sheet.appendRow([new Date(), action, to, subject, details]);
   } catch (logErr) {
     Logger.log('Log write error: ' + logErr.message);
@@ -883,7 +935,6 @@ function escapeHtml_(str) {
  */
 function startNudger() {
   var settings = loadSettings();
-
   stopNudger_(true);
 
   var intervalHours = settings.triggerIntervalHours || 1;
@@ -893,7 +944,6 @@ function startNudger() {
     .create();
 
   runFollowUpCheck();
-
   writeLog_('Nudger Started', '', '', 'Trigger created, running every ' +
     intervalHours + ' hour(s)');
 
@@ -907,7 +957,7 @@ function startNudger() {
       'To stop: \uD83D\uDD77 TAKScripts \u2192 Stop Follow-Up Nudger'
     );
   } catch(e) {
-    Logger.log('\u2705 Follow-Up Nudger is ACTIVE\n\nChecking every ' + intervalHours + ' hour(s) for unreplied emails.\nFollow-ups after: ' + settings.daysBeforeFollowUp + ' days\nAuto-send: ' + (settings.autoSend === true || settings.autoSend === 'true' ? 'ON' : 'OFF') + '\nEmail digest: ' + (settings.sendDigest === true || settings.sendDigest === 'true' ? 'ON' : 'OFF') + '\n\nTo stop: \uD83D\uDD77 TAKScripts \u2192 Stop Follow-Up Nudger');
+    Logger.log('\u2705 Follow-Up Nudger is ACTIVE');
   }
 }
 
@@ -933,7 +983,7 @@ function stopNudger_(silent) {
         'Your dashboard data has been preserved.'
       );
     } catch(e) {
-      Logger.log('\u23F9 Follow-Up Nudger has been stopped.\n\nNo more follow-ups will be sent automatically.\nYour dashboard data has been preserved.');
+      Logger.log('\u23F9 Follow-Up Nudger has been stopped.');
     }
   }
 }
@@ -962,7 +1012,7 @@ function showTestResultsSidebar_(output) {
     '.header h2 { font-size: 14px; font-weight: 600; color: #C9A84C; }' +
     '.content { padding: 16px; line-height: 1.6; }' +
     '</style></head><body>' +
-    '<div class="header"><h2>🧪 Test Run Results</h2></div>' +
+    '<div class="header"><h2>\uD83E\uDDEA Test Run Results</h2></div>' +
     '<div class="content">' + escaped + '</div>' +
     '</body></html>';
   var panel = HtmlService.createHtmlOutput(html).setTitle('Test Run Results').setWidth(400);
@@ -1026,7 +1076,6 @@ function testRun() {
       var toField = lastSentByMe.getTo();
       var recipientEmail = extractEmail_(toField);
       var subject = lastSentByMe.getSubject();
-
       var excluded = shouldExclude_(recipientEmail, excludeDomains);
       var currentCount = followUpCounts[thread.getId()] || 0;
       var maxedOut = currentCount >= maxFollowUps;
@@ -1034,7 +1083,6 @@ function testRun() {
       results.push('To: ' + toField);
       results.push('Subject: ' + subject);
       results.push('Days waiting: ' + daysWaiting);
-
       if (excluded) {
         results.push('\u2192 SKIP (domain excluded)');
       } else if (maxedOut) {
@@ -1049,7 +1097,6 @@ function testRun() {
 
     results.push('---');
     results.push('Total pending follow-ups: ' + pendingCount);
-
     if (pendingCount === 0) {
       results.push('All clear! No emails need follow-up right now.');
     }
@@ -1061,7 +1108,6 @@ function testRun() {
     } catch(e) {
       Logger.log('Sidebar display skipped: ' + e.message);
     }
-
     writeLog_('Test Run', '', '', pendingCount + ' pending follow-ups found');
 
   } catch (err) {
@@ -1081,301 +1127,229 @@ function testRun() {
 
 function getSettingsHtml() {
   return '<!DOCTYPE html>' +
-'<html>' +
-'<head>' +
-'  <style>' +
-'    * { box-sizing: border-box; margin: 0; padding: 0; }' +
-'    body {' +
-'      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;' +
-'      background: #FAFAFA;' +
-'      color: #1A1A1A;' +
-'      font-size: 13px;' +
-'    }' +
-'    .header {' +
-'      background: #1A1A1A;' +
-'      color: white;' +
-'      padding: 20px 16px;' +
-'      text-align: center;' +
-'    }' +
-'    .header .logo { font-size: 24px; margin-bottom: 4px; }' +
-'    .header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; }' +
-'    .header .brand { color: #C9A84C; }' +
-'    .header .sub { font-size: 11px; color: #888; margin-top: 4px; }' +
-'    .form { padding: 16px; }' +
-'    .field { margin-bottom: 16px; }' +
-'    .field label {' +
-'      display: block;' +
-'      font-size: 11px;' +
-'      font-weight: 600;' +
-'      text-transform: uppercase;' +
-'      letter-spacing: 1px;' +
-'      color: #666;' +
-'      margin-bottom: 6px;' +
-'    }' +
-'    .field input, .field textarea, .field select {' +
-'      width: 100%;' +
-'      padding: 10px 12px;' +
-'      border: 1px solid #ddd;' +
-'      border-radius: 6px;' +
-'      font-size: 13px;' +
-'      font-family: inherit;' +
-'      transition: border-color 0.2s, box-shadow 0.2s;' +
-'      background: #fff;' +
-'    }' +
-'    .field input:focus, .field textarea:focus, .field select:focus {' +
-'      outline: none;' +
-'      border-color: #C9A84C;' +
-'      box-shadow: 0 0 0 3px rgba(201,168,76,0.1);' +
-'    }' +
-'    .field textarea { min-height: 120px; resize: vertical; line-height: 1.5; }' +
-'    .field .help {' +
-'      font-size: 11px;' +
-'      color: #999;' +
-'      margin-top: 4px;' +
-'      line-height: 1.4;' +
-'    }' +
-'    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }' +
-'    .toggle-wrap {' +
-'      display: flex;' +
-'      align-items: center;' +
-'      justify-content: space-between;' +
-'      padding: 12px;' +
-'      border: 1px solid #eee;' +
-'      border-radius: 8px;' +
-'      margin-bottom: 10px;' +
-'      background: #fff;' +
-'    }' +
-'    .toggle-wrap .label { font-size: 13px; font-weight: 500; }' +
-'    .toggle-wrap .sublabel { font-size: 11px; color: #999; margin-top: 2px; }' +
-'    .switch {' +
-'      position: relative;' +
-'      width: 44px; height: 24px;' +
-'      flex-shrink: 0; margin-left: 12px;' +
-'    }' +
-'    .switch input { opacity: 0; width: 0; height: 0; }' +
-'    .slider {' +
-'      position: absolute;' +
-'      cursor: pointer;' +
-'      top: 0; left: 0; right: 0; bottom: 0;' +
-'      background: #ccc;' +
-'      border-radius: 24px;' +
-'      transition: 0.3s;' +
-'    }' +
-'    .slider:before {' +
-'      position: absolute; content: "";' +
-'      height: 18px; width: 18px;' +
-'      left: 3px; bottom: 3px;' +
-'      background: white; border-radius: 50%; transition: 0.3s;' +
-'    }' +
-'    .switch input:checked + .slider { background: #C9A84C; }' +
-'    .switch input:checked + .slider:before { transform: translateX(20px); }' +
-'    .btn {' +
-'      width: 100%; padding: 12px;' +
-'      border: none; border-radius: 8px;' +
-'      font-size: 13px; font-weight: 600;' +
-'      cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px;' +
-'    }' +
-'    .btn-primary { background: #1A1A1A; color: #C9A84C; border: 1px solid #C9A84C; }' +
-'    .btn-primary:hover { background: #C9A84C; color: #1A1A1A; }' +
-'    .btn-secondary { background: white; color: #666; border: 1px solid #ddd; margin-top: 8px; }' +
-'    .btn-secondary:hover { border-color: #999; color: #333; }' +
-'    .status {' +
-'      text-align: center; padding: 8px; font-size: 12px;' +
-'      margin-top: 8px; border-radius: 6px; display: none;' +
-'    }' +
-'    .status.success { display: block; background: #E8F5E9; color: #2E7D32; }' +
-'    .status.error { display: block; background: #FFEBEE; color: #C62828; }' +
-'    .divider { border-top: 1px solid #eee; margin: 20px 0; }' +
-'    .variables {' +
-'      background: #f5f5f5; border-radius: 6px;' +
-'      padding: 10px 12px; margin-top: 8px;' +
-'    }' +
-'    .variables code {' +
-'      display: inline-block; background: #e8e8e8;' +
-'      padding: 1px 6px; border-radius: 3px; font-size: 11px; margin: 2px;' +
-'    }' +
-'    .section-title {' +
-'      font-size: 11px; font-weight: 700;' +
-'      text-transform: uppercase; letter-spacing: 1.5px;' +
-'      color: #C9A84C; margin: 20px 0 12px;' +
-'      padding-bottom: 6px; border-bottom: 1px solid #eee;' +
-'    }' +
-'  </style>' +
-'</head>' +
-'<body>' +
-'  <div class="header">' +
-'    <div class="logo">\uD83D\uDD77</div>' +
-'    <h1><span class="brand">TAK</span>Scripts</h1>' +
-'    <div class="sub">Follow-Up Nudger \u00B7 Settings</div>' +
-'  </div>' +
-'' +
-'  <div class="form">' +
-'    <div class="section-title">Timing</div>' +
-'' +
-'    <div class="row">' +
-'      <div class="field">' +
-'        <label>Days Before Follow-Up</label>' +
-'        <input type="number" id="daysBeforeFollowUp" min="1" max="30" value="3" />' +
-'        <div class="help">Wait this many days</div>' +
-'      </div>' +
-'      <div class="field">' +
-'        <label>Max Follow-Ups</label>' +
-'        <input type="number" id="maxFollowUps" min="1" max="10" value="2" />' +
-'        <div class="help">Per thread</div>' +
-'      </div>' +
-'    </div>' +
-'' +
-'    <div class="section-title">Behavior</div>' +
-'' +
-'    <div class="toggle-wrap">' +
-'      <div>' +
-'        <div class="label">Auto-Send Follow-Ups</div>' +
-'        <div class="sublabel">Automatically send nudge emails</div>' +
-'      </div>' +
-'      <label class="switch">' +
-'        <input type="checkbox" id="autoSend" />' +
-'        <span class="slider"></span>' +
-'      </label>' +
-'    </div>' +
-'' +
-'    <div class="toggle-wrap">' +
-'      <div>' +
-'        <div class="label">Email Digest</div>' +
-'        <div class="sublabel">Get a summary of pending follow-ups</div>' +
-'      </div>' +
-'      <label class="switch">' +
-'        <input type="checkbox" id="sendDigest" checked />' +
-'        <span class="slider"></span>' +
-'      </label>' +
-'    </div>' +
-'' +
-'    <div class="toggle-wrap">' +
-'      <div>' +
-'        <div class="label">Auto-Schedule</div>' +
-'        <div class="sublabel">Run on a recurring trigger</div>' +
-'      </div>' +
-'      <label class="switch">' +
-'        <input type="checkbox" id="autoSchedule" onchange="toggleIntervalField()" />' +
-'        <span class="slider"></span>' +
-'      </label>' +
-'    </div>' +
-'' +
-'    <div class="field" id="intervalField" style="display: none;">' +
-'      <label>Run Every</label>' +
-'      <select id="triggerIntervalHours">' +
-'        <option value="1">Every hour</option>' +
-'        <option value="6">Every 6 hours</option>' +
-'        <option value="12">Every 12 hours</option>' +
-'        <option value="24">Once a day</option>' +
-'      </select>' +
-'    </div>' +
-'' +
-'    <div class="section-title">Urgency Thresholds</div>' +
-'' +
-'    <div class="field">' +
-'      <label>Overdue After (days)</label>' +
-'      <input type="number" id="overdueAfterDays" min="1" max="30" value="5" />' +
-'      <div class="help">Emails waiting this many days are marked Overdue</div>' +
-'    </div>' +
-'    <div class="field">' +
-'      <label>Urgent After (days)</label>' +
-'      <input type="number" id="urgentAfterDays" min="1" max="60" value="7" />' +
-'      <div class="help">Emails waiting this many days are marked Urgent</div>' +
-'    </div>' +
-'' +
-'    <div class="section-title">Follow-Up Message</div>' +
-'' +
-'    <div class="field">' +
-'      <label>Subject Line</label>' +
-'      <input type="text" id="followUpSubject" placeholder="Re: {{subject}}" />' +
-'    </div>' +
-'' +
-'    <div class="field">' +
-'      <label>Message Template</label>' +
-'      <textarea id="followUpMessage" placeholder="Hi {{name}}, I wanted to follow up..."></textarea>' +
-'      <div class="variables">' +
-'        <div class="help" style="margin-bottom: 4px;">Template variables:</div>' +
-'        <code>{{name}}</code> recipient\'s first name<br>' +
-'        <code>{{subject}}</code> original subject<br>' +
-'        <code>{{days}}</code> days since you sent it' +
-'      </div>' +
-'    </div>' +
-'' +
-'    <div class="section-title">Filters</div>' +
-'' +
-'    <div class="field">' +
-'      <label>Exclude Domains / Keywords</label>' +
-'      <input type="text" id="excludeDomains" placeholder="noreply, newsletter, mailer-daemon" />' +
-'      <div class="help">Comma-separated. Emails containing these words will be skipped.</div>' +
-'    </div>' +
-'' +
-'    <div class="divider"></div>' +
-'' +
-'    <div id="status" class="status"></div>' +
-'    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>' +
-'    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>' +
-'' +
-'  </div>' +
-'' +
-'  <script>' +
-'    google.script.run.withSuccessHandler(function(settings) {' +
-'      document.getElementById("daysBeforeFollowUp").value = settings.daysBeforeFollowUp || 3;' +
-'      document.getElementById("maxFollowUps").value = settings.maxFollowUps || 2;' +
-'      document.getElementById("overdueAfterDays").value = settings.overdueAfterDays || 5;' +
-'      document.getElementById("urgentAfterDays").value = settings.urgentAfterDays || 7;' +
-'      document.getElementById("autoSend").checked = settings.autoSend === true || settings.autoSend === "true";' +
-'      document.getElementById("sendDigest").checked = settings.sendDigest !== false && settings.sendDigest !== "false";' +
-'      document.getElementById("followUpSubject").value = settings.followUpSubject || "";' +
-'      document.getElementById("followUpMessage").value = settings.followUpMessage || "";' +
-'      document.getElementById("excludeDomains").value = settings.excludeDomains || "";' +
-'      var intervalHours = settings.triggerIntervalHours || 1;' +
-'      document.getElementById("triggerIntervalHours").value = String(intervalHours);' +
-'    }).loadSettings();' +
-'' +
-'    function toggleIntervalField() {' +
-'      var checked = document.getElementById("autoSchedule").checked;' +
-'      document.getElementById("intervalField").style.display = checked ? "block" : "none";' +
-'    }' +
-'' +
-'    function save() {' +
-'      var settings = {' +
-'        daysBeforeFollowUp: parseInt(document.getElementById("daysBeforeFollowUp").value, 10) || 3,' +
-'        maxFollowUps: parseInt(document.getElementById("maxFollowUps").value, 10) || 2,' +
-'        overdueAfterDays: parseInt(document.getElementById("overdueAfterDays").value, 10) || 5,' +
-'        urgentAfterDays: parseInt(document.getElementById("urgentAfterDays").value, 10) || 7,' +
-'        autoSend: document.getElementById("autoSend").checked,' +
-'        sendDigest: document.getElementById("sendDigest").checked,' +
-'        triggerIntervalHours: parseInt(document.getElementById("triggerIntervalHours").value, 10) || 1,' +
-'        followUpSubject: document.getElementById("followUpSubject").value,' +
-'        followUpMessage: document.getElementById("followUpMessage").value,' +
-'        excludeDomains: document.getElementById("excludeDomains").value,' +
-'      };' +
-'' +
-'      var statusEl = document.getElementById("status");' +
-'      var saveBtn = document.getElementById("saveBtn");' +
-'      saveBtn.disabled = true;' +
-'      saveBtn.textContent = "Saving\u2026";' +
-'      google.script.run' +
-'        .withSuccessHandler(function() {' +
-'          statusEl.textContent = "\u2713 Settings saved successfully";' +
-'          statusEl.className = "status success";' +
-'          saveBtn.textContent = "\u2713 Saved!";' +
-'          setTimeout(function() {' +
-'            saveBtn.textContent = "Save Settings";' +
-'            saveBtn.disabled = false;' +
-'          }, 2500);' +
-'        })' +
-'        .withFailureHandler(function(err) {' +
-'          statusEl.textContent = "\u2715 Error: " + err.message;' +
-'          statusEl.className = "status error";' +
-'          saveBtn.textContent = "Save Settings";' +
-'          saveBtn.disabled = false;' +
-'        })' +
-'        .saveSettings(settings);' +
-'    }' +
-'  </script>' +
-'</body>' +
-'</html>';
+  '<html>' +
+  '<head>' +
+  '  <style>' +
+  '    :root {' +
+  '      --gold: #C9A84C;' +
+  '      --gold-hover: #b8943c;' +
+  '      --gold-glow: rgba(201,168,76,0.15);' +
+  '      --bg-dark: #1A1A1A;' +
+  '      --surface: #FAFAFA;' +
+  '      --border: #E0E0E0;' +
+  '    }' +
+  '    * { box-sizing: border-box; margin: 0; padding: 0; }' +
+  '    body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; background: var(--surface); color: #1A1A1A; font-size: 13px; }' +
+  '    .header { background: var(--bg-dark); color: white; padding: 20px 16px; text-align: center; }' +
+  '    .header .logo { font-size: 24px; margin-bottom: 4px; }' +
+  '    .header h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.5px; }' +
+  '    .header .brand { color: var(--gold); }' +
+  '    .header .sub { font-size: 11px; color: #888; margin-top: 4px; }' +
+  '    .form { padding: 16px; }' +
+  '    .section-title {' +
+  '      font-size: 11px; font-weight: 700; text-transform: uppercase;' +
+  '      letter-spacing: 1.2px; color: var(--gold); margin: 20px 0 12px;' +
+  '      padding-bottom: 6px; border-bottom: 2px solid var(--gold);' +
+  '    }' +
+  '    .section-title:first-child { margin-top: 0; }' +
+  '    .field { margin-bottom: 16px; }' +
+  '    .field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-bottom: 6px; }' +
+  '    .field input, .field textarea, .field select {' +
+  '      width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;' +
+  '      font-size: 13px; font-family: inherit; background: white; transition: border-color 0.2s, box-shadow 0.2s;' +
+  '    }' +
+  '    .field input:focus, .field textarea:focus, .field select:focus {' +
+  '      outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-glow);' +
+  '    }' +
+  '    .field textarea { min-height: 120px; resize: vertical; line-height: 1.5; }' +
+  '    .field .help { font-size: 11px; color: #999; margin-top: 4px; line-height: 1.4; }' +
+  '    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }' +
+  '    .toggle-wrap {' +
+  '      display: flex; align-items: center; justify-content: space-between;' +
+  '      padding: 12px; border: 1px solid #eee; border-radius: 8px;' +
+  '      margin-bottom: 10px; background: #fff;' +
+  '    }' +
+  '    .toggle-wrap .label { font-size: 13px; font-weight: 500; }' +
+  '    .toggle-wrap .sublabel { font-size: 11px; color: #999; margin-top: 2px; }' +
+  '    .switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; margin-left: 12px; }' +
+  '    .switch input { opacity: 0; width: 0; height: 0; }' +
+  '    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #ccc; border-radius: 24px; transition: 0.3s; }' +
+  '    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }' +
+  '    .switch input:checked + .slider { background: var(--gold); }' +
+  '    .switch input:checked + .slider:before { transform: translateX(20px); }' +
+  '    .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px; }' +
+  '    .btn-primary { background: var(--gold); color: var(--bg-dark); border: 1px solid var(--gold); }' +
+  '    .btn-primary:hover { background: var(--gold-hover); border-color: var(--gold-hover); }' +
+  '    .btn-primary:disabled { opacity: 0.65; cursor: not-allowed; }' +
+  '    .btn-secondary { background: white; color: #666; border: 1px solid var(--border); margin-top: 8px; }' +
+  '    .btn-secondary:hover { border-color: #999; color: #333; }' +
+  '    .status { text-align: center; padding: 10px 12px; font-size: 12px; font-weight: 500; margin-top: 10px; border-radius: 6px; display: none; animation: fadeIn 0.2s ease; }' +
+  '    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }' +
+  '    .status.success { display: block; background: #E6F4EA; color: #137333; border: 1px solid #ceead6; }' +
+  '    .status.error { display: block; background: #FCE8E6; color: #C5221F; border: 1px solid #f5c6c2; }' +
+  '    .divider { border: none; border-top: 1px solid rgba(201,168,76,0.15); margin: 20px 0; }' +
+  '    .variables { background: #f5f5f5; border-radius: 6px; padding: 10px 12px; margin-top: 8px; }' +
+  '    .variables code { display: inline-block; background: #e8e8e8; padding: 1px 6px; border-radius: 3px; font-size: 11px; margin: 2px; }' +
+  '  </style>' +
+  '</head>' +
+  '<body>' +
+  '  <div class="header">' +
+  '    <div class="logo">\uD83D\uDD77</div>' +
+  '    <h1><span class="brand">TAK</span>Scripts</h1>' +
+  '    <div class="sub">Follow-Up Nudger \u00B7 Settings</div>' +
+  '  </div>' +
+  '' +
+  '  <div class="form">' +
+  '    <div class="section-title">Timing</div>' +
+  '' +
+  '    <div class="row">' +
+  '      <div class="field">' +
+  '        <label>Days Before Follow-Up</label>' +
+  '        <input type="number" id="daysBeforeFollowUp" min="1" max="30" value="3" />' +
+  '        <div class="help">Wait this many days</div>' +
+  '      </div>' +
+  '      <div class="field">' +
+  '        <label>Max Follow-Ups</label>' +
+  '        <input type="number" id="maxFollowUps" min="1" max="10" value="2" />' +
+  '        <div class="help">Per thread</div>' +
+  '      </div>' +
+  '    </div>' +
+  '' +
+  '    <div class="section-title">Behavior</div>' +
+  '' +
+  '    <div class="toggle-wrap">' +
+  '      <div><div class="label">Auto-Send Follow-Ups</div><div class="sublabel">Automatically send nudge emails</div></div>' +
+  '      <label class="switch"><input type="checkbox" id="autoSend" /><span class="slider"></span></label>' +
+  '    </div>' +
+  '' +
+  '    <div class="toggle-wrap">' +
+  '      <div><div class="label">Email Digest</div><div class="sublabel">Get a summary of pending follow-ups</div></div>' +
+  '      <label class="switch"><input type="checkbox" id="sendDigest" checked /><span class="slider"></span></label>' +
+  '    </div>' +
+  '' +
+  '    <div class="toggle-wrap">' +
+  '      <div><div class="label">Auto-Schedule</div><div class="sublabel">Run on a recurring trigger</div></div>' +
+  '      <label class="switch"><input type="checkbox" id="autoSchedule" onchange="toggleIntervalField()" /><span class="slider"></span></label>' +
+  '    </div>' +
+  '' +
+  '    <div class="field" id="intervalField" style="display: none;">' +
+  '      <label>Run Every</label>' +
+  '      <select id="triggerIntervalHours">' +
+  '        <option value="1">Every hour</option>' +
+  '        <option value="6">Every 6 hours</option>' +
+  '        <option value="12">Every 12 hours</option>' +
+  '        <option value="24">Once a day</option>' +
+  '      </select>' +
+  '    </div>' +
+  '' +
+  '    <div class="section-title">Urgency Thresholds</div>' +
+  '' +
+  '    <div class="field">' +
+  '      <label>Overdue After (days)</label>' +
+  '      <input type="number" id="overdueAfterDays" min="1" max="30" value="5" />' +
+  '      <div class="help">Emails waiting this many days are marked Overdue</div>' +
+  '    </div>' +
+  '    <div class="field">' +
+  '      <label>Urgent After (days)</label>' +
+  '      <input type="number" id="urgentAfterDays" min="1" max="60" value="7" />' +
+  '      <div class="help">Emails waiting this many days are marked Urgent</div>' +
+  '    </div>' +
+  '' +
+  '    <div class="section-title">Follow-Up Message</div>' +
+  '' +
+  '    <div class="field">' +
+  '      <label>Subject Line</label>' +
+  '      <input type="text" id="followUpSubject" placeholder="Re: {{subject}}" />' +
+  '    </div>' +
+  '' +
+  '    <div class="field">' +
+  '      <label>Message Template</label>' +
+  '      <textarea id="followUpMessage" placeholder="Hi {{name}}, I wanted to follow up..."></textarea>' +
+  '      <div class="variables">' +
+  '        <div class="help" style="margin-bottom: 4px;">Template variables:</div>' +
+  '        <code>{{name}}</code> recipient\'s first name<br>' +
+  '        <code>{{subject}}</code> original subject<br>' +
+  '        <code>{{days}}</code> days since you sent it' +
+  '      </div>' +
+  '    </div>' +
+  '' +
+  '    <div class="section-title">Filters</div>' +
+  '' +
+  '    <div class="field">' +
+  '      <label>Exclude Domains</label>' +
+  '      <input type="text" id="excludeDomains" placeholder="noreply, newsletter, mailer-daemon" />' +
+  '      <div class="help">Comma-separated. Emails from these domains will be skipped.</div>' +
+  '    </div>' +
+  '' +
+  '    <div class="divider"></div>' +
+  '' +
+  '    <button id="saveBtn" class="btn btn-primary" onclick="save()">Save Settings</button>' +
+  '    <button class="btn btn-secondary" onclick="google.script.host.close()">Close</button>' +
+  '    <div id="status" class="status"></div>' +
+  '' +
+  '  </div>' +
+  '' +
+  '  <script>' +
+  '    google.script.run.withSuccessHandler(function(s) {' +
+  '      document.getElementById("daysBeforeFollowUp").value = s.daysBeforeFollowUp || 3;' +
+  '      document.getElementById("maxFollowUps").value = s.maxFollowUps || 2;' +
+  '      document.getElementById("overdueAfterDays").value = s.overdueAfterDays || 5;' +
+  '      document.getElementById("urgentAfterDays").value = s.urgentAfterDays || 7;' +
+  '      document.getElementById("autoSend").checked = s.autoSend === true || s.autoSend === "true";' +
+  '      document.getElementById("sendDigest").checked = s.sendDigest !== false && s.sendDigest !== "false";' +
+  '      document.getElementById("followUpSubject").value = s.followUpSubject || "";' +
+  '      document.getElementById("followUpMessage").value = s.followUpMessage || "";' +
+  '      document.getElementById("excludeDomains").value = s.excludeDomains || "";' +
+  '      document.getElementById("triggerIntervalHours").value = String(s.triggerIntervalHours || 1);' +
+  '      var autoSchedule = s.autoSchedule === true || s.autoSchedule === "true";' +
+  '      document.getElementById("autoSchedule").checked = autoSchedule;' +
+  '      if (autoSchedule) document.getElementById("intervalField").style.display = "block";' +
+  '    }).loadSettings();' +
+  '' +
+  '    function toggleIntervalField() {' +
+  '      var checked = document.getElementById("autoSchedule").checked;' +
+  '      document.getElementById("intervalField").style.display = checked ? "block" : "none";' +
+  '    }' +
+  '' +
+  '    function save() {' +
+  '      var settings = {' +
+  '        daysBeforeFollowUp: parseInt(document.getElementById("daysBeforeFollowUp").value, 10) || 3,' +
+  '        maxFollowUps: parseInt(document.getElementById("maxFollowUps").value, 10) || 2,' +
+  '        overdueAfterDays: parseInt(document.getElementById("overdueAfterDays").value, 10) || 5,' +
+  '        urgentAfterDays: parseInt(document.getElementById("urgentAfterDays").value, 10) || 7,' +
+  '        autoSend: document.getElementById("autoSend").checked,' +
+  '        sendDigest: document.getElementById("sendDigest").checked,' +
+  '        autoSchedule: document.getElementById("autoSchedule").checked,' +
+  '        triggerIntervalHours: parseInt(document.getElementById("triggerIntervalHours").value, 10) || 1,' +
+  '        followUpSubject: document.getElementById("followUpSubject").value,' +
+  '        followUpMessage: document.getElementById("followUpMessage").value,' +
+  '        excludeDomains: document.getElementById("excludeDomains").value,' +
+  '      };' +
+  '      var statusEl = document.getElementById("status");' +
+  '      var saveBtn = document.getElementById("saveBtn");' +
+  '      saveBtn.disabled = true;' +
+  '      saveBtn.textContent = "Saving\u2026";' +
+  '      google.script.run' +
+  '        .withSuccessHandler(function() {' +
+  '          statusEl.textContent = "\u2713 Settings saved successfully";' +
+  '          statusEl.className = "status success";' +
+  '          saveBtn.textContent = "\u2713 Saved!";' +
+  '          setTimeout(function() {' +
+  '            saveBtn.textContent = "Save Settings";' +
+  '            saveBtn.disabled = false;' +
+  '          }, 2500);' +
+  '        })' +
+  '        .withFailureHandler(function(err) {' +
+  '          statusEl.textContent = "\u2715 Error: " + err.message;' +
+  '          statusEl.className = "status error";' +
+  '          saveBtn.textContent = "Save Settings";' +
+  '          saveBtn.disabled = false;' +
+  '        })' +
+  '        .saveSettings(settings);' +
+  '    }' +
+  '  </script>' +
+  '</body>' +
+  '</html>';
 }
 
 function showHelp() {
@@ -1405,27 +1379,27 @@ function getHelpHtml_() {
   '.tip { background: #FFF8E7; border-left: 3px solid #C9A84C; padding: 8px 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0; font-size: 12px; color: #555; line-height: 1.4; }' +
   '.footer { text-align: center; padding: 12px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; }' +
   '</style></head><body>' +
-  '<div class="header"><div class="icon">🕷</div>' +
+  '<div class="header"><div class="icon">\uD83D\uDD77</div>' +
   '<h2>Follow-Up Nudger</h2><p>Quick Reference Guide</p></div>' +
   '<div class="content">' +
   '<div class="section"><h3>Quick Start</h3><ol>' +
-  '<li>Open <strong>⚙️ Settings</strong> and set how many days before a follow-up is needed</li>' +
-  '<li>Optionally add keywords to focus on specific email types (e.g. "proposal, quote")</li>' +
-  '<li>Click <strong>▶️ Start Follow-Up Nudger</strong> to activate</li>' +
+  '<li>Open <strong>\u2699\uFE0F Settings</strong> and set how many days before a follow-up is needed</li>' +
+  '<li>Optionally configure urgency thresholds for Overdue and Urgent labels</li>' +
+  '<li>Click <strong>\u25B6\uFE0F Start Follow-Up Nudger</strong> to activate</li>' +
   '<li>Emails with no reply appear in the dashboard with days waiting and a direct link</li>' +
-  '<li>Enable auto-schedule so nothing slips through while you are busy</li>' +
+  '<li>Use <strong>Snooze</strong> to hide a row for 7 days, or <strong>Mark Resolved</strong> to dismiss it</li>' +
   '</ol></div>' +
   '<div class="section"><h3>Settings Guide</h3>' +
-  '<div class="setting"><strong>Follow-Up After (days)</strong><span>Emails with no reply after this many days get flagged</span></div>' +
-  '<div class="setting"><strong>Keywords</strong><span>Only watch emails whose subject contains these words. Comma-separated. Leave blank for all sent emails.</span></div>' +
-  '<div class="setting"><strong>Ignore Senders</strong><span>Skip follow-up tracking for these addresses (e.g. automated tools, newsletters)</span></div>' +
-  '<div class="setting"><strong>Auto-Schedule</strong><span>Run automatically in the background — daily is recommended</span></div>' +
+  '<div class="setting"><strong>Days Before Follow-Up</strong><span>Emails with no reply after this many days get flagged</span></div>' +
+  '<div class="setting"><strong>Auto-Send</strong><span>Automatically sends your follow-up template to flagged threads — use with care</span></div>' +
+  '<div class="setting"><strong>Email Digest</strong><span>Sends you a summary email of all pending follow-ups on each run</span></div>' +
+  '<div class="setting"><strong>Auto-Schedule</strong><span>Run automatically in the background on your chosen interval</span></div>' +
   '</div>' +
   '<div class="section"><h3>Tips</h3>' +
   '<div class="tip">Start with a <strong>3-day window</strong> to catch quick follow-ups on proposals and quotes</div>' +
-  '<div class="tip">The dashboard shows <strong>Days Waiting</strong> — sort by this column to prioritize who to follow up with first</div>' +
-  '<div class="tip">Use keywords like "proposal, invoice, quote" to focus only on revenue-related emails</div>' +
+  '<div class="tip">The dashboard shows <strong>Days Waiting</strong> — rows turn amber at Overdue and red at Urgent</div>' +
+  '<div class="tip">Use <strong>Snooze</strong> on threads where you\'re waiting intentionally — they\'ll reappear automatically</div>' +
   '</div></div>' +
-  '<div class="footer">TAKScripts · takscripts.store</div>' +
+  '<div class="footer">TAKScripts \u00B7 takscripts.store</div>' +
   '</body></html>';
 }
