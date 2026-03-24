@@ -117,7 +117,7 @@ Work through each section that applies to the script being reviewed. Check every
 
 **Save Confirmation**
 - [ ] A visible success message appears after save — not just a button state change
-- [ ] Success message uses green (`#34a853`) or green-tinted background
+- [ ] Success message uses green (`#34a853`) or a green-tinted background
 - [ ] Success message auto-dismisses after 3–5 seconds OR has a clear dismiss action
 - [ ] Error messages use red (`#ea4335`) and explain what went wrong in plain language
 - [ ] Save button returns to its default state after save (not stuck in "Saving..." state)
@@ -161,7 +161,7 @@ Work through each section that applies to the script being reviewed. Check every
 - [ ] All styles are inline — no `<style>` block, no external CSS (Gmail strips `<head>` styles)
 - [ ] Font stack: `Arial, Helvetica, sans-serif` (web-safe fonts only — no Roboto, no Google Fonts)
 - [ ] Table-based layout if complex structure is needed — no CSS flexbox or grid in email
-- [ ] Background color is white or very light gray (`#f8f9fa`) — no dark mode-breaking backgrounds
+- [ ] Background color is white or very light gray (`#f8f9fa`) — no dark-mode-breaking backgrounds
 - [ ] Email renders correctly at 375px width (mobile) and 600px width (desktop)
 
 **Status Colors in Email**
@@ -199,11 +199,11 @@ Work through each section that applies to the script being reviewed. Check every
 - [ ] Section headings: 12–14pt, bold
 - [ ] Cover page title: 20–24pt, bold, centered
 - [ ] No font mixing within the same document — one body font, one heading font
-- [ ] No Comic Sans, no Times New Roman in client-facing docs (use Arial, Roboto, or Georgia)
+- [ ] No Comic Sans, no Times New Roman in client-facing docs (use Arial or Georgia)
 
 **Table Styles**
 - [ ] Header row of every table has a colored background (`#1a73e8` for primary tables or `#e8eaed` for secondary)
-- [ ] Header row text is bold and white (or dark on light headers)
+- [ ] Header row text is bold and white (or dark on light-colored headers)
 - [ ] Table borders are present and consistent — no half-bordered tables
 - [ ] Column widths are explicitly set, not left to auto-fit
 - [ ] Alternating row bands applied where the table has more than 5 data rows
@@ -280,7 +280,7 @@ Work through each section that applies to the script being reviewed. Check every
 **User-Facing Messages**
 - [ ] Error messages are written in plain language — no stack traces, no JavaScript error objects
 - [ ] Error messages explain what went wrong AND what the user should do next
-- [ ] Error messages use the word "could not" or "unable to" rather than "Error:" as an opener when possible
+- [ ] Error messages use "could not" or "unable to" rather than "Error:" as an opener where possible
 - [ ] No error message contains internal variable names, function names, or line numbers
 - [ ] Validation errors on sidebar forms highlight the specific field that failed — not just a generic "Something went wrong"
 
@@ -302,7 +302,6 @@ Work through each section that applies to the script being reviewed. Check every
 
 **Accuracy**
 - [ ] Help content matches the current version of the script — no outdated instructions
-- [ ] Screenshots or diagrams referenced in Help actually exist and are current
 - [ ] Step-by-step instructions have been walked through manually to confirm they are correct
 
 **Formatting**
@@ -323,9 +322,9 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 
 | Surface | Key Polish Points |
 |---------|------------------|
-| Docs output | Cover page present with client name, date, invoice number. Table borders consistent. Line items formatted as currency. Total row bold and clearly separated. |
-| Email | Subject includes invoice number and client name. Attachment confirmed. Amount formatted as `$X,XXX.XX`. Payment instructions clear. |
-| Drive folders | Root folder uses em dash pattern. Invoice subfolder named `🧾 Invoices`. Files named `[Date]_Invoice_[Client]_[InvoiceNumber].pdf`. |
+| Docs output | Cover page present with client name, date, and invoice number. Table borders consistent. Line items formatted as currency. Total row is bold and clearly separated from data rows. |
+| Email | Subject includes invoice number and client name. Attachment confirmed present. Amount formatted as `$X,XXX.XX`. Payment instructions are clear and complete. |
+| Drive folders | Root folder uses the em dash pattern. Invoice subfolder named `🧾 Invoices`. Files named `[Date]_Invoice_[Client]_[InvoiceNumber].pdf`. |
 
 ---
 
@@ -333,9 +332,9 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 
 | Surface | Key Polish Points |
 |---------|------------------|
-| Docs output | Cover page with client name, proposal date, and preparer. Section headings consistent size and style. Signature block has adequate white space below signature lines. |
+| Docs output | Cover page with client name, proposal date, and preparer. Section headings are consistent in size and style. Signature block has adequate white space below signature lines. |
 | Drive folders | Separate subfolders for Proposals and Contracts if both types are generated. Version suffix on file name if revisions are possible. |
-| Sidebar | Client name and project title fields validated before generation. Currency fields formatted on input (no raw numbers). Clear success message with a link to the generated doc. |
+| Sidebar | Client name and project title fields validated before generation. Currency fields formatted on input. Clear success message with a link to the generated doc. |
 
 ---
 
@@ -343,8 +342,8 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 
 | Surface | Key Polish Points |
 |---------|------------------|
-| Sheets dashboard | Status column uses conditional formatting: detected (green), pending (yellow), error (red). Invoice count stat card at top. Date detected column formatted as readable date, not timestamp. |
-| Email alerts | Alert subject specific: "Invoice Detected: [Sender] — [Amount]". No raw Gmail message IDs in the email body. |
+| Sheets dashboard | Status column uses conditional formatting: detected (green), pending (yellow), error (red). Invoice count shown as a stat card at top. Date detected column formatted as a readable date, not a raw timestamp. |
+| Email alerts | Alert subject is specific: "Invoice Detected: [Sender] — [Amount]". No raw Gmail message IDs appear in the email body. |
 
 ---
 
@@ -353,8 +352,8 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 | Surface | Key Polish Points |
 |---------|------------------|
 | Sheets dashboard | Days overdue column uses conditional formatting: 1–3 days (yellow), 4–7 days (orange), 8+ days (red). Last contacted date formatted as `MMM d, yyyy`. |
-| Email digest | Digest groups follow-ups by urgency level. Each follow-up entry shows: contact name, company, days overdue, last contact date. Footer includes link to the dashboard sheet. |
-| Sidebar | Follow-up threshold (days) input has sensible default (3) pre-filled. Save confirmation visible and auto-dismisses. |
+| Email digest | Digest groups follow-ups by urgency level. Each entry shows: contact name, company, days overdue, last contact date. Footer includes a link to the dashboard sheet. |
+| Sidebar | Follow-up threshold (days) input has a sensible default (3) pre-filled. Save confirmation is visible and auto-dismisses. |
 
 ---
 
@@ -362,7 +361,7 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 
 | Surface | Key Polish Points |
 |---------|------------------|
-| Sheets dashboard | Current stock column: red text when below threshold, green when at or above. Threshold column is editable but highlighted to show it is a config column. Last updated timestamp in stat card area. |
+| Sheets dashboard | Current stock column: red text when below threshold, green when at or above. Threshold column is highlighted to indicate it is a config column. Last updated timestamp shown in the stat card area. |
 | Email alerts | Subject: "Low Stock Alert: [N] items below threshold". Item list in email formatted as a table, not a raw list. Reorder quantity suggestion included if that feature is active. |
 | Sidebar | Threshold default pre-filled. Email recipient field shows the currently saved address. Run Now button triggers a confirmation toast. |
 
@@ -372,8 +371,8 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 
 | Surface | Key Polish Points |
 |---------|------------------|
-| Sheets dashboard | VIP list is editable directly in the sheet with clear column headers. Priority level column uses color coding: High (red), Medium (yellow), Low (green). Last alert sent column present and formatted. |
-| Email alerts | Alert subject identifies the VIP by name. Alert email is brief — 3–5 lines max. Clearly distinguishable from other automated emails (clear "VIP Alert" branding in header). |
+| Sheets dashboard | VIP list is editable directly in the sheet with clear column headers. Priority level column uses color coding: High (red), Medium (yellow), Low (green). Last alert sent column present and formatted as a readable date. |
+| Email alerts | Alert subject identifies the VIP by name. Alert email is brief — 3–5 lines max. Clearly distinguishable from other automated emails with a "VIP Alert" header. |
 | Sidebar | VIP management UI is intuitive — add/remove from list without needing to edit the sheet directly if a sidebar UI is provided. |
 
 ---
@@ -391,8 +390,8 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 
 | Surface | Key Polish Points |
 |---------|------------------|
-| Sheets dashboard | Unsubscribed count and processed count as stat cards. List of unsubscribed senders formatted as a clean table with timestamp. Status column: Unsubscribed (green), Failed (red), Skipped (gray). |
-| Sidebar | Run scope clearly explained (last N days, or specific label). Dry run mode visually distinct from live run mode — different button color or a warning banner. Confirmation dialog before executing a live run. |
+| Sheets dashboard | Unsubscribed count and processed count displayed as stat cards. List of unsubscribed senders formatted as a clean table with timestamps. Status column: Unsubscribed (green), Failed (red), Skipped (gray). |
+| Sidebar | Run scope is clearly explained (last N days, or specific label). Dry run mode is visually distinct from live run mode — different button color or a warning banner. Confirmation dialog shown before executing a live run. |
 
 ---
 
@@ -400,9 +399,9 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 
 | Surface | Key Polish Points |
 |---------|------------------|
-| Drive folders | Source and destination folder IDs validated before running. Destination folder structure matches the naming and hierarchy standards. No files moved to root of Drive. |
-| Sheets log | Log sheet records: file name, source folder, destination folder, timestamp, and status. Log rows use status color coding. Newest entries at the top (or log is sorted by timestamp descending). |
-| Sidebar | Folder picker or folder ID input clearly labeled. Preview/dry run mode shows what would be moved before executing. |
+| Drive folders | Source and destination folder IDs validated before running. Destination folder structure matches the naming and hierarchy standards. No files moved to the root of Drive. |
+| Sheets log | Log sheet records: file name, source folder, destination folder, timestamp, and status. Log rows use status color coding. Newest entries appear at the top (or log is sorted by timestamp descending). |
+| Sidebar | Folder picker or folder ID input is clearly labeled. Preview/dry run mode shows what would be moved before executing. |
 
 ---
 
@@ -410,9 +409,9 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 
 | Surface | Key Polish Points |
 |---------|------------------|
-| Drive folders | Saved attachments land in clearly named subfolders (e.g., by sender domain or by month). File names use the standard pattern: `[Date]_[OriginalName]` or `[Date]_[Sender]_[OriginalName]`. |
+| Drive folders | Saved attachments land in clearly named subfolders (e.g., by sender domain or by month). File names follow the standard pattern: `[Date]_[Sender]_[OriginalName]`. |
 | Sheets log | Log captures: attachment name, sender email, Gmail message date, save destination, and save timestamp. Log is filterable by sender or date. |
-| Sidebar | Filter rules (sender, subject, file type) are clearly labeled with examples. Saved configuration is displayed back to the user after saving. |
+| Sidebar | Filter rules (sender, subject, file type) are clearly labeled with examples. Saved configuration is displayed back to the user after saving settings. |
 
 ---
 
@@ -420,14 +419,14 @@ Key surfaces to check during polish for each script. Use these alongside the ful
 
 | Surface | Key Polish Points |
 |---------|------------------|
-| Sheets output | Cleaned cells are highlighted briefly or a summary row added showing what was changed. Before/after counts shown as stat cards: rows processed, cells modified, duplicates removed. |
+| Sheets output | Cleaned cells are highlighted briefly or a summary row is added showing what was changed. Before/after counts shown as stat cards: rows processed, cells modified, duplicates removed. |
 | Sidebar | Cleanup options are grouped logically: Format fixes, Duplicate removal, Blank row removal. Destructive operations (delete rows) require a checkbox confirmation before the Run button becomes active. Preview of changes shown before committing where feasible. |
 
 ---
 
 ## 4. Design Tokens
 
-These are the canonical values for all TAKScripts Google Apps Scripts. Use these and only these. Do not introduce new colors, fonts, or size values without updating this token table.
+These are the canonical values for all TAKScripts Google Apps Scripts. Use these and only these. Do not introduce new colors, fonts, or size values without updating this token table first.
 
 ### 4.1 Colors
 
@@ -519,7 +518,7 @@ Each reference file covers one output surface in depth — design rationale, imp
 | `POLISH_SIDEBAR.md` | Form layout, button states, typography, scrollability, save/error confirmation patterns, accessibility basics |
 | `POLISH_DRIVE.md` | Folder naming conventions, file naming conventions, date formats, folder hierarchy, archive structure, emoji prefixes, client-shared folder design |
 
-> Note: `POLISH_EMAIL.md` and `POLISH_SIDEBAR.md` should be created if not yet present. The patterns in Section 2.3 and 2.2 of this guide serve as the interim reference until those files exist.
+> Note: `POLISH_EMAIL.md` and `POLISH_SIDEBAR.md` should be created if not yet present. The patterns in sections 2.3 and 2.2 of this guide serve as the interim reference until those files exist.
 
 ---
 
@@ -537,7 +536,7 @@ A script may only be marked **Approved** when all of the following are true.
 ### 6.2 Visual Requirements
 
 - [ ] All applicable sections of the Polish Checklist (Section 2) are checked off
-- [ ] No design token violations — every color, font, and size is from the token table in Section 4
+- [ ] No design token violations — every color, font, and size matches the token table in Section 4
 - [ ] No placeholder text, test data, or debug output visible in any user-facing surface
 - [ ] At least one complete end-to-end run reviewed visually by the developer (not just logged output)
 
