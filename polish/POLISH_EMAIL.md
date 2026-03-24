@@ -55,7 +55,7 @@ Rules:
 
 ### Personalization
 
-Including the recipient's name or a relevant identifier increases open rates by 10–20%. GmailApp makes this easy since you are constructing the email per-recipient in script.
+Including the recipient's name or a relevant identifier increases open rates. GmailApp makes this easy since you are constructing the email per-recipient in script.
 
 ```
 Invoice #1042 for Acme Corp — Due April 1
@@ -251,7 +251,7 @@ Do not use Google Fonts or custom web fonts — they are not reliably supported 
 Headline:       24px, font-weight: bold
 Subheadline:    18px, font-weight: bold
 Body text:      15px, font-weight: normal
-Small / label:  12px, font-weight: normal
+Small / label:  13px, font-weight: normal
 Footer text:    11px, font-weight: normal
 ```
 
@@ -341,7 +341,7 @@ Never put light gray text on a white background for body content. The WCAG AA mi
 
 ## 6. Call-to-Action Buttons
 
-### The VML / HTML Button Pattern
+### The Table-Based Button Pattern
 
 CSS-only buttons break in Outlook. For broad compatibility, use a table-based button — a `<td>` styled as a button rather than an `<a>` with `display:block`.
 
@@ -374,22 +374,34 @@ Min-width:     160px if button text is short
 ```html
 <!-- Success / Confirm -->
 <td style="background-color:#16a34a;border-radius:6px;">
-  <a href="#" style="...color:#ffffff;...">Approve</a>
+  <a href="#" style="display:inline-block;font-family:Arial,sans-serif;font-size:15px;
+                     font-weight:bold;color:#ffffff;text-decoration:none;padding:14px 28px;">
+    Approve
+  </a>
 </td>
 
 <!-- Warning / Review -->
 <td style="background-color:#d97706;border-radius:6px;">
-  <a href="#" style="...color:#ffffff;...">Review Now</a>
+  <a href="#" style="display:inline-block;font-family:Arial,sans-serif;font-size:15px;
+                     font-weight:bold;color:#ffffff;text-decoration:none;padding:14px 28px;">
+    Review Now
+  </a>
 </td>
 
 <!-- Danger / Urgent -->
 <td style="background-color:#dc2626;border-radius:6px;">
-  <a href="#" style="...color:#ffffff;...">Take Action</a>
+  <a href="#" style="display:inline-block;font-family:Arial,sans-serif;font-size:15px;
+                     font-weight:bold;color:#ffffff;text-decoration:none;padding:14px 28px;">
+    Take Action
+  </a>
 </td>
 
 <!-- Ghost / secondary (use sparingly) -->
 <td style="background-color:#ffffff;border-radius:6px;border:2px solid #2563eb;">
-  <a href="#" style="...color:#2563eb;...">View Details</a>
+  <a href="#" style="display:inline-block;font-family:Arial,sans-serif;font-size:15px;
+                     font-weight:bold;color:#2563eb;text-decoration:none;padding:12px 26px;">
+    View Details
+  </a>
 </td>
 ```
 
@@ -463,6 +475,7 @@ For alerts that contain multiple data points:
 ```html
 <table width="100%" cellpadding="0" cellspacing="0" border="0"
        style="border:1px solid #e5e5e5;border-radius:6px;overflow:hidden;margin:16px 0;">
+  <!-- Column headers -->
   <tr style="background-color:#f8f8f8;">
     <td style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:#555555;
                padding:10px 16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #e5e5e5;">
@@ -473,6 +486,7 @@ For alerts that contain multiple data points:
       Value
     </td>
   </tr>
+  <!-- Data row -->
   <tr>
     <td style="font-family:Arial,sans-serif;font-size:14px;color:#555555;padding:12px 16px;border-bottom:1px solid #f0f0f0;">
       Triggered At
@@ -490,6 +504,22 @@ For alerts that contain multiple data points:
     </td>
   </tr>
 </table>
+```
+
+### Alert Callout Box
+
+For a single prominent message (e.g., one critical value):
+
+```html
+<div style="background-color:#fef2f2;border-left:4px solid #dc2626;border-radius:4px;
+            padding:16px 20px;margin:16px 0;">
+  <p style="font-family:Arial,sans-serif;font-size:14px;font-weight:bold;color:#991b1b;margin:0 0 4px 0;">
+    Inventory Below Threshold
+  </p>
+  <p style="font-family:Arial,sans-serif;font-size:13px;color:#555555;margin:0;line-height:1.6;">
+    Widget A — Model XR4 is at 4 units. Minimum threshold is 10. Reorder immediately.
+  </p>
+</div>
 ```
 
 ---
@@ -551,8 +581,8 @@ Digest emails consolidate multiple updates into one message. They are longer tha
   📦 Low Inventory Items
 </p>
 
-<!-- Item row -->
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px;">
+<!-- Item row (repeat for each item) -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:2px;">
   <tr>
     <td style="font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;padding:10px 0;
                border-bottom:1px solid #f0f0f0;">
@@ -567,7 +597,7 @@ Digest emails consolidate multiple updates into one message. They are longer tha
 </table>
 
 <!-- View All link -->
-<p style="font-family:Arial,sans-serif;font-size:13px;text-align:right;margin:4px 0 24px 0;">
+<p style="font-family:Arial,sans-serif;font-size:13px;text-align:right;margin:8px 0 24px 0;">
   <a href="https://your-link.com/inventory" style="color:#2563eb;text-decoration:none;font-weight:bold;">
     View all inventory →
   </a>
@@ -577,12 +607,18 @@ Digest emails consolidate multiple updates into one message. They are longer tha
 ### Section Divider
 
 ```html
-<tr>
-  <td style="padding:0 32px;">
-    <hr style="border:none;border-top:1px solid #e5e5e5;margin:8px 0 24px 0;">
-  </td>
-</tr>
+<table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td style="padding:0 0 24px 0;">
+      <hr style="border:none;border-top:1px solid #e5e5e5;margin:0;">
+    </td>
+  </tr>
+</table>
 ```
+
+### Digest Length Rule
+
+Truncate each section to a maximum of **10 items** in the email. Link to a full view for anything beyond that. A digest email that renders 80 rows of data will be clipped by Gmail (102KB limit) and is unreadable regardless.
 
 ---
 
@@ -599,7 +635,7 @@ Invoice emails must be clear, professional, and include every piece of informati
 4. Line items table
 5. Totals section (subtotal, tax, total due)
 6. Payment instructions / CTA
-7. Notes or payment methods accepted
+7. Notes or accepted payment methods
 8. Footer
 ```
 
@@ -613,13 +649,45 @@ Invoice emails must be clear, professional, and include every piece of informati
         Invoice
       </div>
       <div style="font-family:Arial,sans-serif;font-size:14px;color:#555555;margin-top:4px;">
-        Invoice #1042 &nbsp;·&nbsp; Issued March 23, 2026
+        Invoice #1042 &nbsp;&middot;&nbsp; Issued March 23, 2026
       </div>
     </td>
-    <td align="right">
-      <div style="font-family:Arial,sans-serif;font-size:13px;color:#555555;">Due Date</div>
-      <div style="font-family:Arial,sans-serif;font-size:18px;font-weight:bold;color:#dc2626;">
+    <td align="right" style="vertical-align:top;">
+      <div style="font-family:Arial,sans-serif;font-size:12px;color:#888888;text-transform:uppercase;letter-spacing:0.5px;">
+        Due Date
+      </div>
+      <div style="font-family:Arial,sans-serif;font-size:18px;font-weight:bold;color:#dc2626;margin-top:4px;">
         April 1, 2026
+      </div>
+    </td>
+  </tr>
+</table>
+```
+
+### Billed To Block
+
+```html
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
+  <tr>
+    <td width="50%" style="vertical-align:top;">
+      <div style="font-family:Arial,sans-serif;font-size:12px;color:#888888;text-transform:uppercase;
+                  letter-spacing:0.5px;margin-bottom:6px;">
+        Billed To
+      </div>
+      <div style="font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;line-height:1.6;">
+        Acme Corp<br>
+        John Smith<br>
+        john@acme.com
+      </div>
+    </td>
+    <td width="50%" style="vertical-align:top;text-align:right;">
+      <div style="font-family:Arial,sans-serif;font-size:12px;color:#888888;text-transform:uppercase;
+                  letter-spacing:0.5px;margin-bottom:6px;">
+        From
+      </div>
+      <div style="font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;line-height:1.6;">
+        TAK Scripts<br>
+        billing@your-domain.com
       </div>
     </td>
   </tr>
@@ -637,16 +705,18 @@ Invoice emails must be clear, professional, and include every piece of informati
                padding:10px 16px;text-transform:uppercase;letter-spacing:0.5px;">
       Description
     </td>
-    <td align="center" style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;
-                               color:#555555;padding:10px 8px;text-transform:uppercase;letter-spacing:0.5px;">
+    <td align="center" width="60"
+        style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:#555555;
+               padding:10px 8px;text-transform:uppercase;letter-spacing:0.5px;">
       Qty
     </td>
-    <td align="right" style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;
-                              color:#555555;padding:10px 16px;text-transform:uppercase;letter-spacing:0.5px;">
+    <td align="right" width="100"
+        style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:#555555;
+               padding:10px 16px;text-transform:uppercase;letter-spacing:0.5px;">
       Amount
     </td>
   </tr>
-  <!-- Line item -->
+  <!-- Line item (repeat as needed) -->
   <tr>
     <td style="font-family:Arial,sans-serif;font-size:14px;color:#1a1a1a;
                padding:12px 16px;border-top:1px solid #f0f0f0;">
@@ -663,8 +733,9 @@ Invoice emails must be clear, professional, and include every piece of informati
   </tr>
   <!-- Subtotal -->
   <tr style="background-color:#f8f8f8;">
-    <td colspan="2" style="font-family:Arial,sans-serif;font-size:13px;color:#555555;
-                            padding:10px 16px;text-align:right;border-top:1px solid #e5e5e5;">
+    <td colspan="2" align="right"
+        style="font-family:Arial,sans-serif;font-size:13px;color:#555555;
+               padding:10px 8px;border-top:1px solid #e5e5e5;">
       Subtotal
     </td>
     <td align="right" style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;
@@ -674,23 +745,23 @@ Invoice emails must be clear, professional, and include every piece of informati
   </tr>
   <!-- Tax -->
   <tr style="background-color:#f8f8f8;">
-    <td colspan="2" style="font-family:Arial,sans-serif;font-size:13px;color:#555555;
-                            padding:4px 16px;text-align:right;">
+    <td colspan="2" align="right"
+        style="font-family:Arial,sans-serif;font-size:13px;color:#555555;padding:4px 8px;">
       Tax (12.5%)
     </td>
-    <td align="right" style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;
-                              padding:4px 16px;">
+    <td align="right" style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a1a;padding:4px 16px;">
       $50.00
     </td>
   </tr>
   <!-- Total -->
   <tr style="background-color:#1a1a2e;">
-    <td colspan="2" style="font-family:Arial,sans-serif;font-size:15px;font-weight:bold;
-                            color:#ffffff;padding:14px 16px;text-align:right;border-radius:0 0 0 6px;">
+    <td colspan="2" align="right"
+        style="font-family:Arial,sans-serif;font-size:15px;font-weight:bold;
+               color:#ffffff;padding:14px 8px;">
       Total Due
     </td>
     <td align="right" style="font-family:Arial,sans-serif;font-size:15px;font-weight:bold;
-                              color:#ffffff;padding:14px 16px;border-radius:0 0 6px 0;">
+                              color:#ffffff;padding:14px 16px;">
       $450.00
     </td>
   </tr>
@@ -698,8 +769,6 @@ Invoice emails must be clear, professional, and include every piece of informati
 ```
 
 ### Payment Instructions
-
-After the line items, include a clearly labeled callout box with payment instructions:
 
 ```html
 <div style="background-color:#f0f4ff;border-left:4px solid #2563eb;border-radius:4px;
@@ -723,7 +792,7 @@ After the line items, include a clearly labeled callout box with payment instruc
 Always include a plain text body alongside the HTML body. It is required for:
 - Anti-spam compliance (some filters penalize HTML-only emails)
 - Accessibility (screen readers on some mail clients prefer it)
-- Email clients with HTML disabled (rare but real for some enterprise environments)
+- Email clients with HTML disabled (rare but real in some enterprise environments)
 
 The `GmailApp.sendEmail()` and `MailApp.sendEmail()` functions accept both `body` (plain text) and `htmlBody` parameters. Both should always be populated.
 
@@ -744,10 +813,10 @@ Due Date:       April 1, 2026
 
 ITEMS
 -----
-Monthly Automation Service x1    $400.00
-Tax (12.5%)                        $50.00
-                                ---------
-Total Due:                        $450.00
+Monthly Automation Service x1        $400.00
+Tax (12.5%)                           $50.00
+                                  ---------
+Total Due:                           $450.00
 
 PAY ONLINE
 ----------
@@ -761,15 +830,15 @@ Questions? Reply to this email.
 
 ---
 TAK Scripts | your-domain.com
-This is an automated message. Do not reply to opt out — contact us directly.
+This is an automated message. Contact support@your-domain.com for help.
 ```
 
 Plain text rules:
 - Use ALL CAPS for section headers
 - Use dashes (`---`) as dividers
-- Right-align amounts by using spaces (or just list them)
 - Include the full URL, never a hyperlinked anchor phrase
 - Keep lines under 80 characters
+- Right-align numeric columns with spaces for readability
 
 ---
 
@@ -790,7 +859,21 @@ Key rules that make emails "responsive enough" without media queries:
 - Button padding generous enough for touch: min 14px vertical
 ```
 
-### Fluid Two-Column Layout (collapses gracefully)
+### Fluid Images
+
+```html
+<img src="https://your-image.com/image.png"
+     alt="Descriptive alt text here"
+     width="600"
+     style="max-width:100%;height:auto;display:block;border:0;">
+```
+
+- Always set `width` as an HTML attribute (Outlook uses it for layout)
+- Always set `max-width:100%` in style (mobile clients use it)
+- Always set `display:block` to prevent phantom gaps below images
+- Always include `alt` text — images may be blocked by default
+
+### Fluid Two-Column Layout
 
 ```html
 <table width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -805,30 +888,16 @@ Key rules that make emails "responsive enough" without media queries:
 </table>
 ```
 
-On mobile, the columns will stack if the viewport is narrower than the combined column widths. For guaranteed stacking on mobile, use single-column layout only — it is the safest choice for GmailApp-generated emails.
-
-### Fluid Images
-
-```html
-<img src="https://your-image.com/image.png"
-     alt="Descriptive alt text"
-     width="600"
-     style="max-width:100%;height:auto;display:block;border:0;">
-```
-
-- Always set `width` as an HTML attribute (Outlook uses it for layout)
-- Always set `max-width:100%` in style (mobile clients use it)
-- Always set `display:block` to prevent phantom gaps below images
-- Always include `alt` text — images may be blocked
+For guaranteed mobile compatibility, prefer single-column layout for all GmailApp-generated emails. Two-column layouts do not stack automatically without `@media` queries.
 
 ### Mobile Font Sizes
 
 Since `@media` queries do not work in Gmail webmail, pick base sizes that work on both:
 
 ```
-Headlines:   22px minimum (reads well on mobile at 22, not oversized on desktop)
-Body text:   15px (comfortable on mobile, not large on desktop)
-Labels:      13px (smallest usable on mobile)
+Headlines:   22px minimum — readable on mobile, not oversized on desktop
+Body text:   15px — comfortable on mobile, clean on desktop
+Labels:      13px — smallest usable size on mobile
 ```
 
 ---
@@ -841,7 +910,7 @@ The footer is not optional. Even for internal automated emails, it should be pre
 
 1. Company name and location or contact email
 2. Auto-generated disclaimer ("This is an automated message")
-3. Unsubscribe or opt-out note (even for transactional, note how to stop receiving)
+3. Unsubscribe or opt-out note (even for transactional, state how to stop receiving)
 4. Optional: link to privacy policy or website
 
 ### Footer HTML
@@ -852,7 +921,7 @@ The footer is not optional. Even for internal automated emails, it should be pre
              padding:24px 32px;text-align:center;">
 
     <p style="font-family:Arial,sans-serif;font-size:12px;color:#888888;margin:0 0 8px 0;">
-      <strong style="color:#555555;">TAK Scripts</strong> &nbsp;·&nbsp; your-domain.com
+      <strong style="color:#555555;">TAK Scripts</strong> &nbsp;&middot;&nbsp; your-domain.com
     </p>
 
     <p style="font-family:Arial,sans-serif;font-size:11px;color:#aaaaaa;
@@ -866,7 +935,7 @@ The footer is not optional. Even for internal automated emails, it should be pre
 
     <p style="font-family:Arial,sans-serif;font-size:11px;color:#aaaaaa;margin:0;">
       To stop receiving these notifications, contact your account administrator or
-      <a href="https://your-domain.com/unsubscribe" style="color:#888888;text-decoration:underline;">
+      <a href="https://your-domain.com/preferences" style="color:#888888;text-decoration:underline;">
         update your preferences
       </a>.
     </p>
@@ -875,15 +944,19 @@ The footer is not optional. Even for internal automated emails, it should be pre
 </tr>
 ```
 
-### Footer Notes for Internal Automated Emails
+### Footer for Internal Automated Emails
 
-For automated reports sent to internal team members (not external customers), the footer can be shorter, but should still include:
+For automated reports sent to internal team members (not external customers), the footer can be shorter but must still include the automated disclaimer:
 
 ```html
-<p style="font-family:Arial,sans-serif;font-size:11px;color:#aaaaaa;text-align:center;margin:0;">
-  Sent automatically by TAK Scripts on March 23, 2026 at 9:00 AM.
-  To adjust frequency or recipients, update the script configuration.
-</p>
+<tr>
+  <td style="background-color:#f8f8f8;border-top:1px solid #e5e5e5;padding:16px 32px;text-align:center;">
+    <p style="font-family:Arial,sans-serif;font-size:11px;color:#aaaaaa;margin:0;">
+      Sent automatically by TAK Scripts &middot; March 23, 2026 at 9:00 AM
+      &middot; To adjust frequency or recipients, update the script configuration.
+    </p>
+  </td>
+</tr>
 ```
 
 ---
@@ -892,15 +965,15 @@ For automated reports sent to internal team members (not external customers), th
 
 ### Image-Only Emails
 
-Never send an email where all meaningful content is inside images. Images are blocked by default in many clients (Outlook, corporate environments). If your email is one large image with text in it, recipients see a blank email.
+Never send an email where all meaningful content is inside images. Images are blocked by default in many clients (Outlook, corporate environments). If your email is one large image with text baked in, recipients see a blank email.
 
 - Always use HTML text for all critical content
-- Images are decorative only; the email must make sense with images off
+- Images are decorative only; the email must make sense with images turned off
 - Every image must have descriptive `alt` text
 
 ### Too Many Links
 
-More than 5–6 links in one email increases spam score and reduces click-through on any individual link. For digest emails with many links, use a single "View Full Report" CTA and surface only the 2–3 most important direct links.
+More than 5–6 links in one email increases spam score and reduces click-through on any individual link. For digest emails with many links, use a single "View Full Report" CTA and surface only the 2–3 most important direct links inline.
 
 ### Spam Trigger Patterns
 
@@ -910,14 +983,14 @@ Avoid in subject and body:
 - "Free", "guaranteed", "no cost"
 - "You've been selected", "Congratulations"
 - Excessive exclamation marks: "Great news!!!"
-- ALL CAPS words outside of intentional style contexts
-- Unrelated/mismatched link domains (link text says X, URL goes to Y)
+- ALL CAPS words outside of intentional label contexts
+- Mismatched link text and destination (link says "Report" but URL goes elsewhere)
 - Very short email body with one big image and one link
 ```
 
 ### Missing Alt Text
 
-Every `<img>` tag must have an `alt` attribute, even if the value is empty for decorative images (`alt=""`). Missing `alt` attributes reduce accessibility and can lower deliverability scores.
+Every `<img>` tag must have an `alt` attribute, even if the value is empty for purely decorative images (`alt=""`). Missing `alt` attributes reduce accessibility and can lower deliverability scores.
 
 ### Broken Layout Patterns
 
@@ -927,62 +1000,69 @@ Every `<img>` tag must have an `alt` attribute, even if the value is empty for d
 - Never embed base64-encoded images inline — use hosted URLs
 - Never use JavaScript in email — it is stripped by every client
 - Never use <form> or <input> elements — stripped by Gmail
-- Never use external stylesheets or <style> blocks in <head> for critical styles
+- Never use external stylesheets or <style> blocks for critical styles
 ```
 
 ### Oversized Emails
 
-Keep total HTML size under **100KB**. Gmail clips emails over 102KB and shows "Message clipped — view entire message", which breaks the email experience and the unsubscribe link.
+Keep total HTML size under **100KB**. Gmail clips emails over 102KB and shows "Message clipped — view entire message", which breaks the email experience and can hide the footer and unsubscribe link.
 
-For digest emails with many data rows, truncate to the top 10–15 items and link to the full report.
+For digest emails with many data rows, truncate to the top 10–15 items and link to the full report externally.
 
 ---
 
 ## 14. GmailApp / MailApp Implementation
 
-### MailApp.sendEmail() vs GmailApp.sendEmail()
+### MailApp vs GmailApp
 
 | Feature | MailApp | GmailApp |
 |---|---|---|
-| Authorization scope | Simpler | Requires Gmail scope |
-| Daily quota (consumer account) | 100/day | 100/day |
-| Daily quota (Google Workspace) | 1,500/day | 1,500/day |
+| Authorization scope required | Simple (mail) | Full Gmail scope |
+| Daily quota — consumer account | 100/day | 100/day |
+| Daily quota — Google Workspace | 1,500/day | 1,500/day |
 | Send as alias | No | Yes, with `from` param |
 | Attach Drive files | Yes | Yes |
-| Access sent mail | No | Yes |
-| Recommended for | Simple notifications | Full email control |
+| Access sent mail / threads | No | Yes |
+| Best for | Simple alerts, notifications | Full email control, alias sending |
 
-Use `MailApp` for simple alerting scripts. Use `GmailApp` when you need to send as a different address, manage threads, or check sent history.
+Use `MailApp` for simple alerting scripts. Use `GmailApp` when you need to send as a different address, manage threads, or inspect sent mail.
 
-### sendEmail() Parameters
+### sendEmail() Parameter Reference
 
-Both services share the same parameter structure:
+Both services share the same parameter object structure:
 
 ```javascript
 MailApp.sendEmail({
   to: 'recipient@example.com',
-  cc: 'cc@example.com',           // optional
-  bcc: 'bcc@example.com',         // optional
+  cc: 'cc@example.com',                          // optional
+  bcc: 'bcc@example.com',                        // optional
   subject: 'Invoice #1042 — $450.00 Due',
-  body: plainTextBody,             // plain text fallback — always provide this
-  htmlBody: htmlBody,              // HTML version
-  name: 'TAK Scripts',            // display name for sender
-  attachments: [file.getAs('application/pdf')]  // optional
+  body: plainTextBody,                            // plain text fallback — always provide
+  htmlBody: htmlBody,                             // HTML version
+  name: 'TAK Scripts',                           // display name for sender
+  replyTo: 'support@your-domain.com',            // optional reply-to address
+  attachments: [file.getAs('application/pdf')]   // optional
 });
 ```
 
-### Code Pattern: Build HTML Body as a Function
+### Code Pattern: HTML Builder Function
 
-Keep your HTML template in a helper function. Build the string with template literals and inject variables:
+Build the HTML body in a dedicated helper function. Inject dynamic values via template literals. Keep presentation and logic separate.
 
 ```javascript
 function buildAlertEmail(data) {
-  const statusColor = data.severity === 'critical' ? '#dc2626' : '#d97706';
-  const statusLabel = data.severity === 'critical' ? '🔴 Critical Alert' : '🟡 Needs Attention';
+  const statusBg    = data.severity === 'critical' ? '#fef2f2' : '#fffbeb';
+  const statusBdr   = data.severity === 'critical' ? '#fecaca' : '#fde68a';
+  const statusColor = data.severity === 'critical' ? '#991b1b' : '#92400e';
+  const statusLabel = data.severity === 'critical' ? '&#9679; Critical Alert' : '&#9679; Needs Attention';
+  const btnColor    = data.severity === 'critical' ? '#dc2626' : '#d97706';
 
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+</head>
 <body style="margin:0;padding:0;background-color:#f4f4f4;font-family:Arial,sans-serif;">
 
   <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;color:#f4f4f4;line-height:1px;">
@@ -1005,10 +1085,11 @@ function buildAlertEmail(data) {
 
           <tr>
             <td style="padding:32px;">
-              <div style="display:inline-block;background-color:#fef2f2;border:1px solid #fecaca;
+
+              <div style="display:inline-block;background-color:${statusBg};border:1px solid ${statusBdr};
                           border-radius:4px;padding:4px 12px;margin-bottom:16px;">
-                <span style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;
-                             color:${statusColor};text-transform:uppercase;letter-spacing:0.5px;">
+                <span style="font-family:Arial,sans-serif;font-size:12px;font-weight:bold;color:${statusColor};
+                             text-transform:uppercase;letter-spacing:0.5px;">
                   ${statusLabel}
                 </span>
               </div>
@@ -1025,7 +1106,7 @@ function buildAlertEmail(data) {
 
               <table cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="background-color:#2563eb;border-radius:6px;">
+                  <td style="background-color:${btnColor};border-radius:6px;">
                     <a href="${data.ctaUrl}"
                        style="display:inline-block;font-family:Arial,sans-serif;font-size:15px;
                               font-weight:bold;color:#ffffff;text-decoration:none;padding:14px 28px;">
@@ -1034,14 +1115,14 @@ function buildAlertEmail(data) {
                   </td>
                 </tr>
               </table>
+
             </td>
           </tr>
 
           <tr>
             <td style="background-color:#f8f8f8;border-top:1px solid #e5e5e5;
                        padding:20px 32px;text-align:center;">
-              <p style="font-family:Arial,sans-serif;font-size:11px;color:#aaaaaa;
-                         line-height:1.6;margin:0;">
+              <p style="font-family:Arial,sans-serif;font-size:11px;color:#aaaaaa;line-height:1.6;margin:0;">
                 This is an automated message from TAK Scripts.
                 Contact <a href="mailto:support@your-domain.com" style="color:#888888;">support@your-domain.com</a> for help.
               </p>
@@ -1061,14 +1142,15 @@ function buildAlertEmail(data) {
 
 ```javascript
 function buildAlertPlainText(data) {
+  const divider = '-'.repeat(40);
   return [
     data.headline.toUpperCase(),
-    '='.repeat(40),
+    divider,
     '',
     data.bodyText,
     '',
     'TAKE ACTION',
-    '------------',
+    divider,
     data.ctaUrl,
     '',
     '---',
@@ -1078,61 +1160,64 @@ function buildAlertPlainText(data) {
 }
 ```
 
-### Sending the Email
+### Code Pattern: Send with Quota Guard
 
 ```javascript
 function sendAlert(data) {
-  const htmlBody = buildAlertEmail(data);
+  const htmlBody  = buildAlertEmail(data);
   const plainBody = buildAlertPlainText(data);
 
   MailApp.sendEmail({
-    to: data.recipientEmail,
-    subject: data.subject,
-    body: plainBody,
+    to:       data.recipientEmail,
+    subject:  data.subject,
+    body:     plainBody,
     htmlBody: htmlBody,
-    name: 'TAK Scripts Alerts'
+    name:     'TAK Scripts Alerts'
   });
-}
-```
-
-### Quota Management
-
-Daily quotas reset at midnight Pacific Time. For scripts that send batches:
-
-```javascript
-function getRemainingQuota() {
-  return MailApp.getRemainingDailyQuota();
 }
 
 function sendBatchSafe(emailList, buildFn) {
   let remaining = MailApp.getRemainingDailyQuota();
 
-  emailList.forEach((item, index) => {
+  for (let i = 0; i < emailList.length; i++) {
     if (remaining <= 5) {
-      console.warn(`Quota nearly exhausted. Stopping at item ${index}.`);
-      return;
+      console.warn(`Quota nearly exhausted. Stopped at item ${i} of ${emailList.length}.`);
+      break;
     }
-    MailApp.sendEmail(buildFn(item));
+    MailApp.sendEmail(buildFn(emailList[i]));
     remaining--;
-    Utilities.sleep(200); // avoid rate limit bursts
-  });
+    Utilities.sleep(200); // avoid burst rate limiting
+  }
 }
 ```
 
-### Checklist Before Sending
+### Quota Limits Reference
 
 ```
-[ ] Subject line is 40–60 chars, no spam trigger words
-[ ] Preheader text is set and unique from subject
-[ ] HTML body uses table-based layout only
-[ ] All CSS is inlined on each element
-[ ] Plain text body is populated
-[ ] All links are absolute URLs (https://)
-[ ] Images have alt text; email works with images off
+Consumer Google account:   100 emails/day
+Google Workspace account:  1,500 emails/day
+Quota resets:              Midnight Pacific Time
+
+Check remaining quota:
+  MailApp.getRemainingDailyQuota()  // returns integer
+
+GmailApp does not expose a getRemainingDailyQuota() method — use MailApp to check.
+```
+
+### Pre-Send Checklist
+
+```
+[ ] Subject line is 40–60 chars with no spam trigger words
+[ ] Preheader text is set and unique from the subject line
+[ ] HTML body uses table-based layout — no <div> for structure
+[ ] All CSS is inlined on each element — no <style> block for critical styles
+[ ] Plain text body (body:) is populated alongside htmlBody:
+[ ] All URLs are absolute (https://), not relative paths
+[ ] Images have alt text; email reads correctly with images disabled
 [ ] Total HTML size is under 100KB
-[ ] Footer includes sender info and unsubscribe note
-[ ] Quota checked before batch sends
-[ ] Tested in Gmail webmail before deploying
+[ ] Footer includes sender info and how to stop receiving emails
+[ ] Quota checked before any batch send loop
+[ ] Tested by sending to a real Gmail inbox before deploying
 ```
 
 ---
